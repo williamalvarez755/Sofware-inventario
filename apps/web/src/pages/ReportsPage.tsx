@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatQ } from '@minimarket/shared';
 import { api, ApiError, downloadCsv } from '../api/client';
-import { Nav } from '../components/Nav';
+import { Page } from '../components/Nav';
+import { Button, Cell, Empty, Field, Notice, Row, Select, Table } from '../components/ui';
 
 interface StoreRow { id: string; name: string }
-type Cell = { key: string; label: string; money?: boolean; pct?: boolean };
+type Column = { key: string; label: string; money?: boolean; pct?: boolean };
 
 /** Cada reporte declara su endpoint y sus columnas: la tabla es una sola. */
 const REPORTS: Record<
   string,
-  { label: string; path: string; needsRange: boolean; file: string; columns: Cell[] }
+  { label: string; path: string; needsRange: boolean; file: string; columns: Column[] }
 > = {
   profit: {
     label: 'Utilidades por producto',
@@ -131,9 +132,6 @@ function gtDate(offsetDays = 0): string {
   });
 }
 
-const inputCls =
-  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500';
-
 export function ReportsPage() {
   const [reportKey, setReportKey] = useState('profit');
   const [stores, setStores] = useState<StoreRow[]>([]);
@@ -183,7 +181,7 @@ export function ReportsPage() {
     load();
   }, [load]);
 
-  // Columnas que el API no devolvió (p. ej. costos ocultos al rol) se omiten.
+  // Columnas que el API no devolvió (costos ocultos por rol) se omiten.
   const columns = report.columns.filter(
     (c) => rows.length === 0 || rows.some((r) => r[c.key] !== undefined),
   );
@@ -202,119 +200,96 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Nav />
-      <main className="mx-auto max-w-6xl p-6">
-        <h1 className="text-xl font-bold text-slate-800">Reportes</h1>
+    <Page
+      title="Reportes"
+      subtitle="Todo sale de los movimientos registrados"
+      wide
+      actions={
+        <Button variant="outline" icon="descargar" onClick={exportCsv} disabled={rows.length === 0}>
+          Exportar CSV
+        </Button>
+      }
+    >
+      <div className="glass mb-4 flex flex-wrap items-end gap-3 rounded-2xl p-4">
+        <Select
+          label="Reporte"
+          value={reportKey}
+          onChange={(e) => setReportKey(e.target.value)}
+          className="w-56"
+        >
+          {Object.entries(REPORTS).map(([key, r]) => (
+            <option key={key} value={key}>{r.label}</option>
+          ))}
+        </Select>
 
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="text-sm">
-            <span className="block text-xs font-medium text-slate-500">Reporte</span>
-            <select value={reportKey} onChange={(e) => setReportKey(e.target.value)} className={inputCls + ' mt-1'}>
-              {Object.entries(REPORTS).map(([key, r]) => (
-                <option key={key} value={key}>{r.label}</option>
-              ))}
-            </select>
-          </label>
-
-          {reportKey === 'sales' && (
-            <label className="text-sm">
-              <span className="block text-xs font-medium text-slate-500">Agrupar por</span>
-              <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className={inputCls + ' mt-1'}>
-                <option value="day">Día</option>
-                <option value="user">Usuario</option>
-                <option value="category">Categoría</option>
-                <option value="product">Producto</option>
-                <option value="store">Tienda</option>
-              </select>
-            </label>
-          )}
-
-          <label className="text-sm">
-            <span className="block text-xs font-medium text-slate-500">Tienda</span>
-            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className={inputCls + ' mt-1'}>
-              <option value="">Todas</option>
-              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </label>
-
-          {report.needsRange && (
-            <>
-              <label className="text-sm">
-                <span className="block text-xs font-medium text-slate-500">Desde</span>
-                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls + ' mt-1'} />
-              </label>
-              <label className="text-sm">
-                <span className="block text-xs font-medium text-slate-500">Hasta</span>
-                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls + ' mt-1'} />
-              </label>
-            </>
-          )}
-
-          <button
-            onClick={exportCsv}
-            disabled={rows.length === 0}
-            className="ml-auto rounded-lg border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+        {reportKey === 'sales' && (
+          <Select
+            label="Agrupar por"
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value)}
+            className="w-40"
           >
-            Exportar CSV
-          </button>
-        </div>
+            <option value="day">Día</option>
+            <option value="user">Usuario</option>
+            <option value="category">Categoría</option>
+            <option value="product">Producto</option>
+            <option value="store">Tienda</option>
+          </Select>
+        )}
 
-        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <Select
+          label="Tienda"
+          value={storeId}
+          onChange={(e) => setStoreId(e.target.value)}
+          className="w-44"
+        >
+          <option value="">Todas</option>
+          {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </Select>
 
-        <div className="mt-4 overflow-x-auto rounded-xl bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
-                {columns.map((c) => (
-                  <th key={c.key} className={`px-4 py-3 ${c.money || c.pct ? 'text-right' : ''}`}>
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                  {columns.map((c) => {
-                    const value = row[c.key];
-                    return (
-                      <td
-                        key={c.key}
-                        className={`px-4 py-2.5 ${
-                          c.money || c.pct ? 'text-right tabular-nums text-slate-800' : 'text-slate-600'
-                        }`}
-                      >
-                        {value === null || value === undefined
-                          ? '—'
-                          : c.money
-                            ? formatQ(BigInt(String(value)))
-                            : c.pct
-                              ? `${value}%`
-                              : String(value)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-              {rows.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-400">
-                    Sin datos para los filtros seleccionados
-                  </td>
-                </tr>
-              )}
-              {loading && (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-400">
-                    Cargando…
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </main>
-    </div>
+        {report.needsRange && (
+          <>
+            <Field label="Desde" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
+            <Field label="Hasta" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
+          </>
+        )}
+      </div>
+
+      {error && <div className="mb-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+
+      <Table head={columns.map((c) => c.label)}>
+        {rows.map((row, i) => (
+          <Row key={i}>
+            {columns.map((c) => {
+              const value = row[c.key];
+              return (
+                <Cell
+                  key={c.key}
+                  align={c.money || c.pct ? 'right' : 'left'}
+                  mono={c.money || c.pct}
+                >
+                  {value === null || value === undefined
+                    ? '—'
+                    : c.money
+                      ? formatQ(BigInt(String(value)))
+                      : c.pct
+                        ? `${value}%`
+                        : String(value)}
+                </Cell>
+              );
+            })}
+          </Row>
+        ))}
+        {rows.length === 0 && (
+          <tr>
+            <Cell colSpan={columns.length}>
+              <Empty icon="reportes">
+                {loading ? 'Cargando…' : 'Sin datos para los filtros seleccionados'}
+              </Empty>
+            </Cell>
+          </tr>
+        )}
+      </Table>
+    </Page>
   );
 }

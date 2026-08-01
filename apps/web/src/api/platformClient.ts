@@ -21,6 +21,23 @@ export function clearPlatformSession() {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+/**
+ * Cierra la sesión REVOCÁNDOLA en el servidor, no solo borrándola del
+ * navegador: si el refresh token fue copiado, limpiar localStorage no lo
+ * invalida — seguiría sirviendo hasta expirar.
+ */
+export async function platformLogout(): Promise<void> {
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  if (refreshToken) {
+    await fetch(`${BASE_URL}/api/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    }).catch(() => undefined); // la sesión local se limpia pase lo que pase
+  }
+  clearPlatformSession();
+}
+
 let refreshInFlight: Promise<boolean> | null = null;
 
 function tryRefresh(): Promise<boolean> {

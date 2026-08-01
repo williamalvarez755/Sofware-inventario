@@ -9,6 +9,7 @@ import type { Request } from 'express';
 import type { ExpenseCreateInput } from '@minimarket/shared';
 import { AppError, notFound } from '../../lib/errors.js';
 import { withTenantTx, type TenantClient } from '../../lib/prisma.js';
+import { assertStoreAccess, type MembershipLike } from '../../lib/store-access.js';
 import { audit } from '../audit/audit.service.js';
 import {
   insertCashMovement,
@@ -91,11 +92,14 @@ export function updateExpense(
   userId: string,
   expenseId: string,
   input: { categoryId?: string; description?: string },
+  memberships: MembershipLike[],
   req: Request,
 ) {
   return withTenantTx(tenantId, async (tx) => {
     const before = await tx.expense.findFirst({ where: { id: expenseId } });
     if (!before) throw notFound('Gasto no encontrado');
+    // El gasto pertenece a una tienda: editarlo exige membresía en ella.
+    assertStoreAccess(memberships, before.storeId);
     if (input.categoryId) {
       const category = await tx.expenseCategory.findFirst({
         where: { id: input.categoryId, deletedAt: null },

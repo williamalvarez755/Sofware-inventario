@@ -2,7 +2,7 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fases 0 a 6 COMPLETADAS** — el producto está listo para operar en tienda real. Ver §9 y el backlog de mejoras en §10.
+> **Estado:** **Fases 0 a 7 COMPLETADAS** — producto listo para operar en tienda real, con interfaz definitiva. Ver §9 y el backlog en §10.
 > **Última actualización:** 2026-08-01.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
@@ -472,7 +472,25 @@ expense_categories 1─N expenses
 - **Componentes:** escáner por cámara (BarcodeDetector/ZXing), ESC/POS vía QZ Tray (corte, gaveta), PWA pulida (instalable, tolerancia a micro-cortes), 2FA TOTP, ensayo de restore de backups, pruebas de carga, revisión de seguridad (checklist OWASP ASVS nivel 1–2).
 - **Dependencias:** F2–F5. **Criterios:** impresión con corte automático en al menos 2 marcas de impresora reales; PWA reintenta y no duplica ventas ante corte de red simulado.
 
-**Fase 7 — Comercialización avanzada (post-lanzamiento, priorizar según clientes):** ver §10 Mejoras futuras.
+**Fase 7 — Correcciones de auditoría e interfaz definitiva — ✅ COMPLETADA 2026-08-01**
+
+> **Objetivo:** cerrar los defectos encontrados en la auditoría del código y darle al producto la cara con la que se vende.
+>
+> **Los cuatro hallazgos, corregidos y con prueba:**
+> 1. **2FA inutilizable desde la aplicación.** El servidor respondía `requiresTwoFactor` pero la web siempre esperaba una sesión: quien activara la verificación en dos pasos **quedaba fuera de su propio negocio**. Ahora el ingreso es de dos pantallas, y el token de desafío no sirve como sesión.
+> 2. **Faltaba comprobar la tienda en las mutaciones sensibles.** El permiso decía *qué* puede hacer alguien, pero no *dónde*: un encargado con permiso de caja podía retirar efectivo, anular ventas o editar gastos de **otra sucursal** conociendo el identificador. La comprobación se puso en los **servicios**, no en las rutas, para que proteja también a cualquier llamador futuro.
+> 3. **Los descuentos inflaban los reportes.** Las líneas de venta no llevan el descuento (vive en el encabezado), así que sumar `line_total` reportaba el bruto. Ahora una sola fórmula reparte el descuento en proporción a cada línea: exacta a nivel de venta y justa a nivel de producto. Probado con una venta de Q200.00 con 10 % de descuento — se reporta Q180.00 en las cinco agrupaciones, en el resumen financiero y en los agregados diarios.
+> 4. **El logout de plataforma no revocaba nada.** Solo borraba el navegador; si el token se había copiado, seguía sirviendo. Ahora revoca en el servidor.
+>
+> **Ingreso por usuario (D-036).** Un cajero de barrio no siempre tiene correo, y teclear una dirección larga en cada turno es fricción real frente al cliente. Se agregó `username` único con respaldo automático desde el correo existente; el correo se sigue aceptando para no romper integraciones.
+>
+> **Interfaz definitiva.** Dirección: *vidrio oscuro de precisión* — superficies casi negras translúcidas, bordes de un píxel que captan la luz, halos del acento muy diluidos y grano sutil para evitar el banding en pantallas baratas. Tipografía Bricolage Grotesque para títulos, IBM Plex Sans para la interfaz e **IBM Plex Mono tabular para todo el dinero**, que es lo que un cajero lee ocho horas al día. **Sin un solo emoji**: juego de iconos propio de trazo 1.6 px sobre rejilla de 24, que hereda el color del tema (en Windows los emojis se pintan de un color que ningún tema puede corregir). **Selector de apariencia** con dos ejes que el usuario combina: cuatro fondos oscuros (Grafito, Carbón, Pizarra, Oliva) y seis acentos encabezados por la familia anaranjada (Ámbar, Brasa, Durazno) más Jade, Acero y Arena; se guarda por equipo y se aplica antes del primer pintado. Incluye un interruptor para **apagar el efecto vidrio** en las computadoras lentas que son la norma en tienda.
+>
+> **Defectos de interfaz encontrados y corregidos durante la verificación en navegador:** el formulario de ingreso recargaba la página porque la primitiva de panel no reenviaba `onSubmit`; y los modales salían recortados por quedar atrapados en el contexto de apilamiento de la barra fija — ahora se renderizan en un portal.
+>
+> **Verificación:** 128 pruebas en el API y 11 en la web, todas en verde; compilación de producción correcta. En navegador: ingreso con usuario, cambio de tema aplicándose al instante en toda la interfaz, y venta completa de Q13.50 con Q20.00 recibidos → cambio Q6.50 y comprobante No. 128.
+
+**Post-lanzamiento (priorizar según clientes):** ver §10 Mejoras futuras.
 
 ---
 
@@ -537,6 +555,11 @@ expense_categories 1─N expenses
 | D-033 | 2026-08-01 | El secreto de 2FA vive en la tabla `user_totp`, no en una columna de `users`. Se revierte el intento de restringir por columna | Restringir columnas de `users` rompía toda consulta sin `select` explícito — la autorización por PIN de supervisor dejó de funcionar — y dejaba una trampa para cada función futura. Con el secreto aislado, `users` es una tabla normal para el runtime y el material de 2FA queda simplemente fuera de su alcance, igual que `refresh_tokens`. |
 | D-034 | 2026-08-01 | Límites de autenticación en tres cubos: por cuenta (ip+correo, 10), por conexión (100) y por desafío 2FA (10). Configurables por entorno | Limitar solo por IP castiga a toda una tienda: los cajeros comparten conexión y el error de uno bloqueaba a los demás en pleno mostrador. La lógica de las claves se prueba por unidad; los límites se elevan en la suite para no chocar con una defensa calibrada para humanos. |
 | D-035 | 2026-08-01 | El script de prueba de carga crea su **propio tenant desechable** en lugar de reutilizar el demo | Los ledgers son inmutables por diseño (los triggers rechazan `DELETE` incluso al superusuario), así que sus datos no se pueden retirar. En el tenant demo contaminarían para siempre las tiendas y los reportes; en uno aparte, no molestan a nadie. |
+| D-036 | 2026-08-01 | El ingreso es por **nombre de usuario**, no por correo. El correo se conserva en el modelo y se sigue aceptando en el login | Un cajero de tienda de barrio no siempre tiene correo, y teclear una dirección larga en cada cambio de turno es fricción real con clientes esperando. Aceptar ambos evita romper integraciones y permite migrar sin avisos. |
+| D-037 | 2026-08-01 | La comprobación de **acceso por tienda** vive en los servicios, no en los routers | Una ruta nueva que olvide la comprobación quedaría abierta; en el servicio, cualquier llamador —presente o futuro— queda cubierto. El permiso dice *qué* puede hacer alguien; la membresía, *dónde*. |
+| D-038 | 2026-08-01 | Los reportes reparten el descuento del encabezado **en proporción a cada línea** (`line_total − line_total × descuento / subtotal`) | Sumar `line_total` a secas inflaba ingresos y utilidad en cualquier venta con descuento. El reparto proporcional es exacto a nivel de venta (las líneas suman el subtotal) y es la única atribución defendible a nivel de producto; el único margen es un centavo de redondeo por grupo. |
+| D-039 | 2026-08-01 | Tema con **dos ejes que el usuario combina** (fondo oscuro + acento) sobre variables CSS, con interruptor para apagar el vidrio | Pedido explícito del dueño: colores oscuros y minimalistas, combinables con anaranjados, elegidos por el usuario. Escribir todo contra variables hace que cambiar de tema sea instantáneo y no deje ni un borde fuera de tono. El vidrio se apaga porque las computadoras de tienda no siempre tienen GPU decente. |
+| D-040 | 2026-08-01 | Iconos SVG propios, **cero emojis** | En Windows los emojis se pintan con su propia paleta, que ningún tema puede corregir, y su peso óptico varía entre plataformas. Un juego propio hereda `currentColor` y comparte trazo. |
 
 ---
 

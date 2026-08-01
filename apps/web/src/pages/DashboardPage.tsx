@@ -3,13 +3,21 @@ import { Link } from 'react-router-dom';
 import { formatQ } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { Nav } from '../components/Nav';
+import { Icon } from '../components/Icon';
+import { Page } from '../components/Nav';
 import { SalesChart, type DayPoint } from '../components/SalesChart';
+import {
+  Button,
+  Empty,
+  Notice,
+  Panel,
+  SectionTitle,
+  Select,
+  Stat,
+  cx,
+} from '../components/ui';
 
-interface StoreRow {
-  id: string;
-  name: string;
-}
+interface StoreRow { id: string; name: string }
 interface Dashboard {
   salesCount: number;
   salesTotal: string;
@@ -30,10 +38,11 @@ interface LowStockRow {
   minStock: string;
 }
 
-/** Rango en horario de Guatemala (el negocio, no el navegador). */
+/** Rango en horario de Guatemala: el negocio, no el navegador. */
 function gtDate(offsetDays = 0): string {
-  const d = new Date(Date.now() + offsetDays * 86_400_000);
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' });
+  return new Date(Date.now() + offsetDays * 86_400_000).toLocaleDateString('en-CA', {
+    timeZone: 'America/Guatemala',
+  });
 }
 
 const RANGES = [
@@ -45,7 +54,7 @@ const RANGES = [
 export function DashboardPage() {
   const { me } = useAuth();
   const [stores, setStores] = useState<StoreRow[]>([]);
-  const [storeId, setStoreId] = useState<string>(''); // '' = todas
+  const [storeId, setStoreId] = useState('');
   const [rangeDays, setRangeDays] = useState(6);
   const [data, setData] = useState<Dashboard | null>(null);
   const [low, setLow] = useState<LowStockRow[]>([]);
@@ -65,7 +74,9 @@ export function DashboardPage() {
     try {
       const [dashboard, lowStock] = await Promise.all([
         api<Dashboard>(`/api/reports/dashboard?${params}`),
-        api<LowStockRow[]>(`/api/reports/inventory?lowOnly=true${storeId ? `&storeId=${storeId}` : ''}`),
+        api<LowStockRow[]>(
+          `/api/reports/inventory?lowOnly=true${storeId ? `&storeId=${storeId}` : ''}`,
+        ),
       ]);
       setData(dashboard);
       setLow(lowStock.slice(0, 8));
@@ -81,127 +92,147 @@ export function DashboardPage() {
   if (!me) return null;
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Nav />
-      <main className="mx-auto max-w-5xl p-6">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Resumen del negocio</h1>
-            <p className="text-sm text-slate-500">{me.user.name}</p>
-          </div>
-          {canSeeReports && (
-            <div className="ml-auto flex flex-wrap gap-2">
-              <select
-                value={storeId}
-                onChange={(e) => setStoreId(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-              >
-                <option value="">Todas mis tiendas</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-              <div className="flex overflow-hidden rounded-lg border border-slate-300">
-                {RANGES.map((r) => (
-                  <button
-                    key={r.days}
-                    onClick={() => setRangeDays(r.days)}
-                    className={`px-3 py-2 text-sm font-medium ${
-                      rangeDays === r.days ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-        {!canSeeReports && (
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <h2 className="font-semibold text-slate-800">Su turno</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Vaya a <Link to="/pos" className="font-medium text-emerald-700">POS</Link> para vender o a{' '}
-              <Link to="/caja" className="font-medium text-emerald-700">Caja</Link> para ver los movimientos de su turno.
-            </p>
-          </div>
-        )}
-
-        {canSeeReports && data && (
+    <Page
+      title="Resumen del negocio"
+      subtitle={me.user.name}
+      actions={
+        canSeeReports && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile label="Ventas" value={formatQ(BigInt(data.salesTotal))} hint={`${data.salesCount} venta(s)`} />
-              <StatTile label="Utilidad bruta" value={formatQ(BigInt(data.profitTotal))} hint={`Ticket prom. ${formatQ(BigInt(data.ticketAverage))}`} accent />
-              <StatTile label="Gastos" value={formatQ(BigInt(data.expensesTotal))} hint={`Compras ${formatQ(BigInt(data.purchasesTotal))}`} />
-              <StatTile
-                label="Anuladas"
-                value={formatQ(BigInt(data.voidedTotal))}
-                hint={`${data.voidedCount} venta(s)`}
-                warn={data.voidedCount > 0}
-              />
+            <Select
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              aria-label="Tienda"
+              className="w-48"
+            >
+              <option value="">Todas mis tiendas</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </Select>
+            <div className="glass flex overflow-hidden rounded-xl p-1">
+              {RANGES.map((r) => (
+                <button
+                  key={r.days}
+                  onClick={() => setRangeDays(r.days)}
+                  aria-pressed={rangeDays === r.days}
+                  className={cx(
+                    'rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors',
+                    rangeDays === r.days
+                      ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-ink))]'
+                      : 'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text-1))]',
+                  )}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
+          </>
+        )
+      }
+    >
+      {error && (
+        <div className="mb-4">
+          <Notice tone="danger" icon="alerta">{error}</Notice>
+        </div>
+      )}
 
-            <section className="mt-4 rounded-xl bg-white p-5 shadow-sm">
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="font-semibold text-slate-800">Ventas por día</h2>
-                <Link to="/reportes" className="text-sm font-medium text-emerald-700 hover:text-emerald-900">
-                  Ver reportes →
+      {!canSeeReports && (
+        <Panel className="p-8 text-center">
+          <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent))]">
+            <Icon name="punto-venta" size={24} />
+          </span>
+          <h2 className="font-display text-lg font-semibold text-[hsl(var(--text-1))]">
+            Su turno
+          </h2>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-[hsl(var(--text-3))]">
+            Vaya al punto de venta para cobrar, o a caja para ver los movimientos de su turno.
+          </p>
+          <div className="mt-5 flex justify-center gap-2">
+            <Link to="/pos">
+              <Button variant="primary" icon="punto-venta">Ir al punto de venta</Button>
+            </Link>
+            <Link to="/caja">
+              <Button variant="outline" icon="caja">Mi caja</Button>
+            </Link>
+          </div>
+        </Panel>
+      )}
+
+      {canSeeReports && data && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Ventas"
+              value={formatQ(BigInt(data.salesTotal))}
+              hint={`${data.salesCount} venta(s)`}
+              icon="punto-venta"
+            />
+            <Stat
+              label="Utilidad bruta"
+              value={formatQ(BigInt(data.profitTotal))}
+              hint={`Ticket promedio ${formatQ(BigInt(data.ticketAverage))}`}
+              tone="accent"
+              icon="reportes"
+            />
+            <Stat
+              label="Gastos"
+              value={formatQ(BigInt(data.expensesTotal))}
+              hint={`Compras ${formatQ(BigInt(data.purchasesTotal))}`}
+              icon="gastos"
+            />
+            <Stat
+              label="Anuladas"
+              value={formatQ(BigInt(data.voidedTotal))}
+              hint={`${data.voidedCount} venta(s)`}
+              tone={data.voidedCount > 0 ? 'danger' : 'neutral'}
+              icon="alerta"
+            />
+          </div>
+
+          <Panel className="mt-4 p-5">
+            <SectionTitle
+              action={
+                <Link
+                  to="/reportes"
+                  className="flex items-center gap-1 text-[13px] font-medium text-[hsl(var(--accent-strong))] hover:underline"
+                >
+                  Ver reportes <Icon name="flecha-derecha" size={14} />
                 </Link>
-              </div>
-              <SalesChart data={data.series} />
-            </section>
+              }
+            >
+              Ventas por día
+            </SectionTitle>
+            <SalesChart data={data.series} />
+          </Panel>
 
-            <section className="mt-4 rounded-xl bg-white p-5 shadow-sm">
-              <h2 className="font-semibold text-slate-800">
-                Stock bajo {low.length > 0 && <span className="text-red-600">({low.length})</span>}
-              </h2>
-              {low.length === 0 && (
-                <p className="mt-2 text-sm text-slate-400">Todo el inventario está sobre su mínimo.</p>
-              )}
-              <div className="mt-2 divide-y divide-slate-50">
+          <Panel className="mt-4 p-5">
+            <SectionTitle>
+              Stock bajo{' '}
+              {low.length > 0 && <span className="text-red-400">({low.length})</span>}
+            </SectionTitle>
+            {low.length === 0 ? (
+              <Empty icon="cheque">Todo el inventario está sobre su mínimo</Empty>
+            ) : (
+              <div className="divide-y divide-white/[0.05]">
                 {low.map((r) => (
-                  <div key={`${r.store}-${r.productId}`} className="flex items-center justify-between py-2 text-sm">
+                  <div
+                    key={`${r.store}-${r.productId}`}
+                    className="flex items-center justify-between py-2.5"
+                  >
                     <div>
-                      <p className="text-slate-700">{r.name}</p>
-                      <p className="text-xs text-slate-400">{r.store}</p>
+                      <p className="text-sm text-[hsl(var(--text-1))]">{r.name}</p>
+                      <p className="text-xs text-[hsl(var(--text-3))]">{r.store}</p>
                     </div>
-                    <span className="font-semibold text-red-600">
+                    <span className="money text-sm font-semibold text-red-400">
                       {r.stockQty} / mín. {r.minStock}
                     </span>
                   </div>
                 ))}
               </div>
-            </section>
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
-
-function StatTile({
-  label, value, hint, accent, warn,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  accent?: boolean;
-  warn?: boolean;
-}) {
-  return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <p
-        className={`mt-1 text-2xl font-bold ${
-          warn ? 'text-red-600' : accent ? 'text-emerald-700' : 'text-slate-900'
-        }`}
-      >
-        {value}
-      </p>
-      {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
-    </div>
+            )}
+          </Panel>
+        </>
+      )}
+    </Page>
   );
 }

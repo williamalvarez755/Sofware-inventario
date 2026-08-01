@@ -11,7 +11,7 @@ import type { CashTxInput } from '@minimarket/shared';
 import { roleHasPermission, type Role } from '@minimarket/shared';
 import { AppError, notFound } from '../../lib/errors.js';
 import { withTenantTx, type TenantClient } from '../../lib/prisma.js';
-import type { MembershipLike } from '../../lib/store-access.js';
+import { assertStoreAccess, type MembershipLike } from '../../lib/store-access.js';
 import { audit } from '../audit/audit.service.js';
 import { verifyAuthorizer } from '../auth/pin.service.js';
 
@@ -185,6 +185,10 @@ export function registerCashTx(
 ) {
   return withTenantTx(tenantId, async (tx) => {
     const session = await lockOpenSession(tx, sessionId);
+    // El permiso dice QUÉ puede hacer; la membresía dice DÓNDE. Sin esta
+    // comprobación, un encargado de una sucursal podría mover el efectivo de
+    // otra con solo conocer el id de su sesión de caja.
+    assertStoreAccess(memberships, session.storeId);
 
     let authorizedBy: string | undefined;
     if (kind === 'WITHDRAWAL') {

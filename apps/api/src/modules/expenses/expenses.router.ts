@@ -78,7 +78,14 @@ expensesRouter.patch(
   validate(expenseUpdateSchema),
   async (req, res) => {
     res.json(
-      await updateExpense(req.auth!.tenantId!, req.auth!.userId, req.params.id as string, req.body, req),
+      await updateExpense(
+        req.auth!.tenantId!,
+        req.auth!.userId,
+        req.params.id as string,
+        req.body,
+        req.memberships!,
+        req,
+      ),
     );
   },
 );

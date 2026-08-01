@@ -39,7 +39,7 @@ platformRouter.post(
   passwordAttemptLimiter,
   validate(loginSchema),
   async (req, res) => {
-    res.json(await loginPlatformUser(req.body.email, req.body.password, req));
+    res.json(await loginPlatformUser(req.body.identifier, req.body.password, req));
   },
 );
 

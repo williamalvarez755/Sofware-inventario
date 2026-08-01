@@ -94,6 +94,7 @@ model Subscription {
 
 model PlatformUser {
   id            String    @id @db.Uuid
+  username      String    @unique
   email         String    @unique
   name          String
   passwordHash  String    @map("password_hash")
@@ -117,6 +118,9 @@ enum MemberRole {
 model User {
   id                 String    @id @db.Uuid
   tenantId           String    @map("tenant_id") @db.Uuid
+  // Identificador de ingreso (D-036): un cajero de barrio no siempre tiene
+  // correo, pero siempre puede tener un usuario corto y fácil de teclear.
+  username           String    @unique
   email              String    @unique // único GLOBAL en v1 (D-018)
   name               String
   phone              String?

@@ -25,7 +25,7 @@ authRouter.post(
   passwordAttemptLimiter,
   validate(loginSchema),
   async (req, res) => {
-    res.json(await loginTenantUser(req.body.email, req.body.password, req));
+    res.json(await loginTenantUser(req.body.identifier, req.body.password, req));
   },
 );
 
@@ -54,7 +54,14 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   const [user, tenant, memberships] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, phone: true, mustChangePassword: true },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        email: true,
+        phone: true,
+        mustChangePassword: true,
+      },
     }),
     db.tenant.findUnique({ where: { id: tenantId! }, select: { id: true, name: true } }),
     db.storeMember.findMany({

@@ -56,6 +56,7 @@ async function main() {
     data: {
       id: uuidv7(),
       tenantId: tenant.id,
+      username: `cajero-${stamp}`,
       email: `cajero-${stamp}@carga.local`,
       name: 'Cajero de carga',
       // Hash de la contraseña demo: la genera el seed, aquí se reutiliza para
@@ -112,7 +113,7 @@ async function main() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: owner.email,
+        username: owner.username,
         password: process.env.SEED_DEMO_PASSWORD ?? 'Demo!2026',
       }),
     }),

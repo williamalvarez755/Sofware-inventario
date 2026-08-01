@@ -1,28 +1,35 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { restorePlatformSession } from './api/platformClient';
+import { AuthProvider, useAuth } from './auth/AuthContext';
+import { ThemeProvider } from './theme/ThemeProvider';
+import { Icon } from './components/Icon';
+import { CashPage } from './pages/CashPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ExpensesPage } from './pages/ExpensesPage';
+import { LoginPage } from './pages/LoginPage';
+import { PosPage } from './pages/PosPage';
+import { ProductsPage } from './pages/ProductsPage';
+import { PurchasesPage } from './pages/PurchasesPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { SuppliersPage } from './pages/SuppliersPage';
 import { PlatformDashboardPage } from './pages/platform/PlatformDashboardPage';
 import { PlatformLoginPage } from './pages/platform/PlatformLoginPage';
-import { AuthProvider, useAuth } from './auth/AuthContext';
-import { DashboardPage } from './pages/DashboardPage';
-import { LoginPage } from './pages/LoginPage';
-import { ProductsPage } from './pages/ProductsPage';
-import { PosPage } from './pages/PosPage';
-import { CashPage } from './pages/CashPage';
-import { PurchasesPage } from './pages/PurchasesPage';
-import { ExpensesPage } from './pages/ExpensesPage';
-import { SuppliersPage } from './pages/SuppliersPage';
-import { ReportsPage } from './pages/ReportsPage';
+
+function Cargando() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3">
+      <span className="glass flex size-12 animate-pulse items-center justify-center rounded-2xl text-[hsl(var(--accent))]">
+        <Icon name="caja" size={22} />
+      </span>
+      <p className="text-sm text-[hsl(var(--text-3))]">Cargando…</p>
+    </div>
+  );
+}
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { me, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-slate-400">
-        Cargando…
-      </div>
-    );
-  }
+  if (loading) return <Cargando />;
   return me ? children : <Navigate to="/login" replace />;
 }
 
@@ -32,94 +39,44 @@ function PlatformProtected({ children }: { children: React.ReactElement }) {
   useEffect(() => {
     restorePlatformSession().then((ok) => setState(ok ? 'ok' : 'anon'));
   }, []);
-  if (state === 'loading') {
-    return <div className="flex min-h-screen items-center justify-center text-slate-400">Cargando…</div>;
-  }
+  if (state === 'loading') return <Cargando />;
   return state === 'ok' ? children : <Navigate to="/plataforma/login" replace />;
 }
 
+const PROTEGIDAS: [string, React.ReactElement][] = [
+  ['/', <DashboardPage key="d" />],
+  ['/pos', <PosPage key="p" />],
+  ['/caja', <CashPage key="c" />],
+  ['/productos', <ProductsPage key="pr" />],
+  ['/compras', <PurchasesPage key="co" />],
+  ['/gastos', <ExpensesPage key="g" />],
+  ['/proveedores', <SuppliersPage key="s" />],
+  ['/reportes', <ReportsPage key="r" />],
+];
+
 export function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/plataforma/login" element={<PlatformLoginPage />} />
-          <Route
-            path="/plataforma"
-            element={
-              <PlatformProtected>
-                <PlatformDashboardPage />
-              </PlatformProtected>
-            }
-          />
-          <Route
-            path="/"
-            element={
-              <Protected>
-                <DashboardPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/productos"
-            element={
-              <Protected>
-                <ProductsPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/pos"
-            element={
-              <Protected>
-                <PosPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/caja"
-            element={
-              <Protected>
-                <CashPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/compras"
-            element={
-              <Protected>
-                <PurchasesPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/gastos"
-            element={
-              <Protected>
-                <ExpensesPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/proveedores"
-            element={
-              <Protected>
-                <SuppliersPage />
-              </Protected>
-            }
-          />
-          <Route
-            path="/reportes"
-            element={
-              <Protected>
-                <ReportsPage />
-              </Protected>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/plataforma/login" element={<PlatformLoginPage />} />
+            <Route
+              path="/plataforma"
+              element={
+                <PlatformProtected>
+                  <PlatformDashboardPage />
+                </PlatformProtected>
+              }
+            />
+            {PROTEGIDAS.map(([path, element]) => (
+              <Route key={path} path={path} element={<Protected>{element}</Protected>} />
+            ))}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

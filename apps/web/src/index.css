@@ -1,14 +1,230 @@
 @import 'tailwindcss';
 
-/* Impresión térmica 58/80 mm (D-009, vía CSS): al imprimir solo se ve el
-   comprobante, alineado al borde superior izquierdo del papel. */
+/* ============================================================================
+   Sistema visual — "vidrio oscuro de precisión"
+   ----------------------------------------------------------------------------
+   La superficie y el acento los define el usuario (src/theme/themes.ts) y se
+   inyectan como variables HSL en :root. Todo lo de aquí se escribe contra esas
+   variables, nunca contra un color fijo, para que cambiar de tema sea
+   instantáneo y no deje ni un borde fuera de tono.
+   ============================================================================ */
+
+@theme {
+  --font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-bg: hsl(var(--bg));
+  --color-bg-deep: hsl(var(--bg-deep));
+  --color-surface-1: hsl(var(--surface-1));
+  --color-surface-2: hsl(var(--surface-2));
+  --color-surface-3: hsl(var(--surface-3));
+  --color-line: hsl(var(--border));
+  --color-ink: hsl(var(--text-1));
+  --color-ink-2: hsl(var(--text-2));
+  --color-ink-3: hsl(var(--text-3));
+  --color-accent: hsl(var(--accent));
+  --color-accent-strong: hsl(var(--accent-strong));
+  --color-accent-ink: hsl(var(--accent-ink));
+}
+
+:root {
+  /* Valores iniciales: evitan el destello antes de que React aplique el tema. */
+  --bg: 222 14% 4.5%;
+  --bg-deep: 222 16% 3%;
+  --surface-1: 222 12% 9%;
+  --surface-2: 222 11% 13%;
+  --surface-3: 222 10% 17%;
+  --border: 222 10% 22%;
+  --text-1: 220 16% 97%;
+  --text-2: 220 9% 72%;
+  --text-3: 220 8% 52%;
+  --accent: 31 91% 55%;
+  --accent-strong: 31 91% 62%;
+  --accent-ink: 30 60% 6%;
+
+  color-scheme: dark;
+  accent-color: hsl(var(--accent));
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background-color: hsl(var(--bg));
+  color: hsl(var(--text-1));
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv05' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --- Atmósfera: dos halos del acento, muy diluidos, y grano ---------------
+   Sin esto el fondo plano delata que "es una app". Con esto hay profundidad
+   antes de dibujar un solo componente. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      60rem 40rem at 12% -10%,
+      hsl(var(--accent) / 0.13),
+      transparent 60%
+    ),
+    radial-gradient(
+      50rem 36rem at 105% 8%,
+      hsl(var(--accent) / 0.07),
+      transparent 55%
+    ),
+    linear-gradient(180deg, hsl(var(--bg)) 0%, hsl(var(--bg-deep)) 100%);
+}
+
+/* Grano sutil: rompe el degradado y evita el banding en pantallas baratas. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Vidrio ---------------------------------------------------------------
+   El brillo interior superior es lo que da la sensación de canto biselado:
+   es la línea que "atrapa la luz". Con data-glass="off" todo cae a superficies
+   sólidas, para equipos de tienda sin GPU decente. */
+.glass {
+  background: hsl(var(--surface-1) / 0.66);
+  border: 1px solid hsl(0 0% 100% / 0.07);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
+    0 1px 2px hsl(var(--bg-deep) / 0.6),
+    0 24px 48px -28px hsl(var(--bg-deep) / 0.9);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+.glass-soft {
+  background: hsl(var(--surface-1) / 0.45);
+  border: 1px solid hsl(0 0% 100% / 0.05);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+}
+
+:root[data-glass='off'] .glass,
+:root[data-glass='off'] .glass-soft {
+  background: hsl(var(--surface-1));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* --- Tipografía ----------------------------------------------------------- */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.022em;
+}
+
+/* El dinero SIEMPRE en cifras tabulares: las columnas se alinean y el ojo
+   compara montos sin releer. */
+.money {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* --- Foco visible y consistente ------------------------------------------ */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* --- Barras de desplazamiento discretas ---------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--surface-3));
+  background-clip: content-box;
+}
+
+/* --- Entrada de pantalla: una sola coreografía, escalonada ---------------- */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.surgir {
+  animation: surgir 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surgir {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Autocompletado del navegador: sin el amarillo que rompe el tema. */
+input:-webkit-autofill,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: hsl(var(--text-1));
+  -webkit-box-shadow: 0 0 0 1000px hsl(var(--surface-2)) inset;
+  caret-color: hsl(var(--text-1));
+}
+
+/* ============================================================================
+   Impresión térmica 58/80 mm (D-009). Al imprimir solo existe el comprobante,
+   en negro sobre blanco: la impresora no entiende de vidrio ni de temas.
+   ============================================================================ */
 @media print {
+  body::before,
+  body::after {
+    display: none;
+  }
   body * {
     visibility: hidden;
   }
   .receipt-print,
   .receipt-print * {
     visibility: visible;
+    color: #000;
+    background: transparent;
   }
   .receipt-print {
     position: absolute;

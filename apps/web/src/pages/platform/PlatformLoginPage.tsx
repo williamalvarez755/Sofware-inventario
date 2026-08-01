@@ -2,11 +2,20 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { platformApi, setPlatformSession } from '../../api/platformClient';
+import { Icon } from '../../components/Icon';
+import { ThemePicker } from '../../components/ThemePicker';
+import { Button, Field, Notice, Panel } from '../../components/ui';
+
+type LoginResponse =
+  | { requiresTwoFactor: true; challengeToken: string }
+  | { accessToken: string; refreshToken: string };
 
 export function PlatformLoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [challenge, setChallenge] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -15,10 +24,21 @@ export function PlatformLoginPage() {
     setError(null);
     setBusy(true);
     try {
-      const data = await platformApi<{ accessToken: string; refreshToken: string }>(
-        '/api/platform/auth/login',
-        { method: 'POST', body: JSON.stringify({ email, password }) },
-      );
+      const data = challenge
+        ? await platformApi<{ accessToken: string; refreshToken: string }>(
+            '/api/platform/auth/2fa/login',
+            { method: 'POST', body: JSON.stringify({ challengeToken: challenge, code }) },
+          )
+        : await platformApi<LoginResponse>('/api/platform/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username: username.trim(), password }),
+          });
+
+      if ('requiresTwoFactor' in data) {
+        setChallenge(data.challengeToken);
+        setCode('');
+        return;
+      }
       setPlatformSession(data);
       navigate('/plataforma', { replace: true });
     } catch (err) {
@@ -29,42 +49,88 @@ export function PlatformLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl">
-        <h1 className="text-2xl font-bold text-slate-800">Panel de plataforma</h1>
-        <p className="mt-1 text-sm text-slate-500">Administración del SaaS</p>
+    <div className="relative flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="absolute right-4 top-4">
+        <ThemePicker />
+      </div>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Correo</span>
-            <input
-              type="email"
-              required
+      <div className="surgir w-full max-w-[26rem]">
+        <div className="mb-7 flex flex-col items-center text-center">
+          <span className="glass mb-4 flex size-14 items-center justify-center rounded-2xl text-[hsl(var(--accent))]">
+            <Icon name="escudo" size={26} />
+          </span>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-[hsl(var(--text-1))]">
+            Plataforma
+          </h1>
+          <p className="mt-1 text-sm text-[hsl(var(--text-3))]">
+            Administración del servicio
+          </p>
+        </div>
+
+        <Panel as="form" className="p-6" onSubmit={onSubmit}>
+          {challenge ? (
+            <Field
+              label="Código de 6 dígitos"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="000000"
               autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Contraseña</span>
-            <input
-              type="password"
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-800"
+              className="money"
+              hint="También sirve uno de sus códigos de recuperación."
             />
-          </label>
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          <button
+          ) : (
+            <div className="space-y-4">
+              <Field
+                label="Usuario"
+                icon="usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoFocus
+                required
+              />
+              <Field
+                label="Contraseña"
+                icon="candado"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4">
+              <Notice tone="danger" icon="alerta">
+                {error}
+              </Notice>
+            </div>
+          )}
+
+          <Button
             type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+            variant="primary"
+            size="lg"
+            loading={busy}
+            iconRight="flecha-derecha"
+            className="mt-5 w-full"
           >
-            {busy ? 'Ingresando…' : 'Ingresar'}
-          </button>
-        </form>
+            {challenge ? 'Verificar' : 'Entrar'}
+          </Button>
+        </Panel>
+
+        <p className="mt-6 text-center text-xs text-[hsl(var(--text-3))]">
+          <a href="/login" className="font-medium text-[hsl(var(--accent-strong))] hover:underline">
+            Volver al acceso de tienda
+          </a>
+        </p>
       </div>
     </div>
   );

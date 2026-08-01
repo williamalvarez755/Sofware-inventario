@@ -2,22 +2,24 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { formatQ, toCentavos } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { Nav } from '../components/Nav';
+import { Page } from '../components/Nav';
+import {
+  Badge,
+  Button,
+  Cell,
+  Empty,
+  Field,
+  Modal,
+  Notice,
+  Panel,
+  Row,
+  Select,
+  Table,
+} from '../components/ui';
 
-interface StoreOpt {
-  id: string;
-  name: string;
-}
-interface Unit {
-  id: string;
-  code: string;
-  name: string;
-  allowsDecimals: boolean;
-}
-interface Category {
-  id: string;
-  name: string;
-}
+interface StoreOpt { id: string; name: string }
+interface Unit { id: string; code: string; name: string; allowsDecimals: boolean }
+interface Category { id: string; name: string }
 interface ProductRow {
   id: string;
   sku: string;
@@ -42,39 +44,20 @@ interface KardexRow {
 const MOVEMENT_LABEL: Record<string, string> = {
   INITIAL: 'Carga inicial',
   PURCHASE: 'Compra',
+  PURCHASE_VOID: 'Compra anulada',
   SALE: 'Venta',
   SALE_VOID: 'Venta anulada',
-  ADJUSTMENT_IN: 'Ajuste (+)',
-  ADJUSTMENT_OUT: 'Ajuste (−)',
+  ADJUSTMENT_IN: 'Ajuste (entrada)',
+  ADJUSTMENT_OUT: 'Ajuste (salida)',
   WASTE: 'Merma',
   INTERNAL_USE: 'Consumo interno',
   RETURN_IN: 'Devolución',
 };
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-const inputCls =
-  'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500';
-
 export function ProductsPage() {
   const { me } = useAuth();
   const [stores, setStores] = useState<StoreOpt[]>([]);
-  const [storeId, setStoreId] = useState<string>('');
+  const [storeId, setStoreId] = useState('');
   const [units, setUnits] = useState<Unit[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -91,10 +74,9 @@ export function ProductsPage() {
   useEffect(() => {
     api<StoreOpt[]>('/api/stores').then((s) => {
       setStores(s);
-      if (s.length && !storeId) setStoreId(s[0]!.id);
+      if (s.length) setStoreId(s[0]!.id);
     });
     api<Unit[]>('/api/units').then(setUnits);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const load = useCallback(async () => {
@@ -114,10 +96,15 @@ export function ProductsPage() {
     setError(null);
     try {
       const text = await file.text();
-      const result = await api<{ created: number; updated: number; errors: { line: number; message: string }[] }>(
-        `/api/products/import?storeId=${storeId}`,
-        { method: 'POST', body: text, headers: { 'Content-Type': 'text/csv' } },
-      );
+      const result = await api<{
+        created: number;
+        updated: number;
+        errors: { line: number; message: string }[];
+      }>(`/api/products/import?storeId=${storeId}`, {
+        method: 'POST',
+        body: text,
+        headers: { 'Content-Type': 'text/csv' },
+      });
       setNotice(
         `Importación: ${result.created} creados, ${result.updated} actualizados` +
           (result.errors.length
@@ -131,117 +118,95 @@ export function ProductsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Nav />
-      <main className="mx-auto max-w-6xl p-6">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-800">Productos</h1>
-          <span className="text-sm text-slate-400">({total})</span>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className={inputCls + ' mt-0 w-auto'}>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-            <input
-              placeholder="Buscar por nombre, SKU o código…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={inputCls + ' mt-0 w-64'}
-            />
-            {!isWorkerOnly && (
-              <>
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="rounded-lg border border-emerald-600 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                >
-                  Importar CSV
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onImportFile(f);
-                    e.target.value = '';
-                  }}
-                />
-                <button
-                  onClick={() => setShowCreate(true)}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                >
-                  + Nuevo producto
-                </button>
-              </>
-            )}
-          </div>
+    <Page
+      title="Productos"
+      subtitle={`${total} en el catálogo`}
+      wide
+      actions={
+        <>
+          <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label="Tienda" className="w-44">
+            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+          <Field
+            icon="buscar"
+            placeholder="Buscar por nombre, SKU o código…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Buscar producto"
+            className="w-64"
+          />
+          {!isWorkerOnly && (
+            <>
+              <Button variant="outline" icon="descargar" onClick={() => fileRef.current?.click()}>
+                Importar CSV
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportFile(f);
+                  e.target.value = '';
+                }}
+              />
+              <Button variant="primary" icon="mas" onClick={() => setShowCreate(true)}>
+                Nuevo producto
+              </Button>
+            </>
+          )}
+        </>
+      }
+    >
+      {error && <div className="mb-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+      {notice && (
+        <div className="mb-4">
+          <Notice tone="ok" icon="cheque" onClose={() => setNotice(null)}>{notice}</Notice>
         </div>
+      )}
 
-        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {notice && (
-          <p className="mb-3 flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            {notice}
-            <button onClick={() => setNotice(null)} className="text-emerald-600">✕</button>
-          </p>
+      <Table head={['Producto', 'Categoría', 'Precio', 'Existencia', '']}>
+        {rows.map((p) => (
+          <Row key={p.id}>
+            <Cell>
+              <span className="block font-medium text-[hsl(var(--text-1))]">{p.name}</span>
+              <span className="text-xs text-[hsl(var(--text-3))]">{p.sku}</span>
+            </Cell>
+            <Cell>{p.category?.name ?? '—'}</Cell>
+            <Cell mono align="right">{formatQ(BigInt(p.price))}</Cell>
+            <Cell align="right">
+              <span className="inline-flex items-center gap-2">
+                <span className={p.lowStock ? 'money font-semibold text-red-400' : 'money'}>
+                  {p.stockQty ?? '0'} {p.unit.code.toLowerCase()}
+                </span>
+                {p.lowStock && <Badge tone="danger">bajo</Badge>}
+              </span>
+            </Cell>
+            <Cell align="right">
+              <span className="flex justify-end gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setKardexProduct(p)}>
+                  Kardex
+                </Button>
+                {!isWorkerOnly && (
+                  <Button size="sm" variant="outline" onClick={() => setAdjustProduct(p)}>
+                    Ajustar
+                  </Button>
+                )}
+              </span>
+            </Cell>
+          </Row>
+        ))}
+        {rows.length === 0 && (
+          <tr>
+            <Cell colSpan={5}>
+              <Empty icon="productos">
+                Sin productos. {!isWorkerOnly && 'Cree el primero o importe un CSV.'}
+              </Empty>
+            </Cell>
+          </tr>
         )}
-
-        <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
-                <th className="px-4 py-3">Producto</th>
-                <th className="px-4 py-3">Categoría</th>
-                <th className="px-4 py-3 text-right">Precio</th>
-                <th className="px-4 py-3 text-right">Stock</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-800">{p.name}</div>
-                    <div className="text-xs text-slate-400">{p.sku}</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{p.category?.name ?? '—'}</td>
-                  <td className="px-4 py-3 text-right font-medium text-slate-700">
-                    {formatQ(BigInt(p.price))}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={p.lowStock ? 'font-semibold text-red-600' : 'text-slate-700'}>
-                      {p.stockQty ?? '0'} {p.unit.code.toLowerCase()}
-                    </span>
-                    {p.lowStock && (
-                      <span className="ml-2 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
-                        bajo
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => setKardexProduct(p)} className="mr-2 text-xs font-medium text-slate-500 hover:text-slate-700">
-                      Kardex
-                    </button>
-                    {!isWorkerOnly && (
-                      <button onClick={() => setAdjustProduct(p)} className="text-xs font-medium text-emerald-700 hover:text-emerald-900">
-                        Ajustar
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                    Sin productos. {!isWorkerOnly && 'Cree el primero o importe un CSV.'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </main>
+      </Table>
 
       {showCreate && (
         <CreateProductModal
@@ -250,6 +215,7 @@ export function ProductsPage() {
           onClose={() => setShowCreate(false)}
           onSaved={() => {
             setShowCreate(false);
+            setNotice('Producto creado');
             load();
           }}
         />
@@ -261,6 +227,7 @@ export function ProductsPage() {
           onClose={() => setAdjustProduct(null)}
           onSaved={() => {
             setAdjustProduct(null);
+            setNotice('Ajuste registrado en el kardex');
             load();
           }}
         />
@@ -268,15 +235,12 @@ export function ProductsPage() {
       {kardexProduct && (
         <KardexModal storeId={storeId} product={kardexProduct} onClose={() => setKardexProduct(null)} />
       )}
-    </div>
+    </Page>
   );
 }
 
 function CreateProductModal({
-  storeId,
-  units,
-  onClose,
-  onSaved,
+  storeId, units, onClose, onSaved,
 }: {
   storeId: string;
   units: Unit[];
@@ -296,6 +260,10 @@ function CreateProductModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const set = (k: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((f) => ({ ...f, [k]: e.target.value }));
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -312,82 +280,81 @@ function CreateProductModal({
           price: toCentavos(form.price || '0'),
           barcode: form.barcode || undefined,
           initial:
-            qty > 0
-              ? { storeId, qty, unitCost: toCentavos(form.initialCost || '0') }
-              : undefined,
+            qty > 0 ? { storeId, qty, unitCost: toCentavos(form.initialCost || '0') } : undefined,
         }),
       });
       onSaved();
     } catch (e2) {
       setError(e2 instanceof ApiError ? e2.message : 'Error al guardar');
-    } finally {
       setBusy(false);
     }
   }
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
   return (
-    <Modal title="Nuevo producto" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3">
-        <label className="block text-sm font-medium text-slate-700">
-          Nombre *
-          <input required value={form.name} onChange={set('name')} className={inputCls} autoFocus />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block text-sm font-medium text-slate-700">
-            SKU (opcional)
-            <input value={form.sku} onChange={set('sku')} className={inputCls} placeholder="auto" />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Código de barras
-            <input value={form.barcode} onChange={set('barcode')} className={inputCls} />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Categoría
-            <input value={form.categoryName} onChange={set('categoryName')} className={inputCls} placeholder="ej. Bebidas" />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Unidad *
-            <select required value={form.unitId} onChange={set('unitId')} className={inputCls}>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Precio de venta (Q) *
-            <input required type="number" step="0.01" min="0" value={form.price} onChange={set('price')} className={inputCls} />
-          </label>
+    <Modal title="Nuevo producto" onClose={onClose} wide>
+      <form onSubmit={submit}>
+        <Field label="Nombre" required autoFocus value={form.name} onChange={set('name')} />
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="SKU" placeholder="se genera solo" value={form.sku} onChange={set('sku')} />
+          <Field label="Código de barras" value={form.barcode} onChange={set('barcode')} />
+          <Field
+            label="Categoría"
+            placeholder="ej. Bebidas"
+            value={form.categoryName}
+            onChange={set('categoryName')}
+          />
+          <Select label="Unidad" required value={form.unitId} onChange={set('unitId')}>
+            {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </Select>
+          <Field
+            label="Precio de venta (Q)"
+            type="number"
+            step="0.01"
+            min="0"
+            required
+            value={form.price}
+            onChange={set('price')}
+            className="money"
+          />
         </div>
-        <fieldset className="rounded-lg border border-slate-200 p-3">
-          <legend className="px-1 text-xs font-semibold uppercase text-slate-400">Stock inicial (opcional)</legend>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm font-medium text-slate-700">
-              Cantidad
-              <input type="number" step="0.001" min="0" value={form.initialQty} onChange={set('initialQty')} className={inputCls} />
-            </label>
-            <label className="block text-sm font-medium text-slate-700">
-              Costo unitario (Q)
-              <input type="number" step="0.01" min="0" value={form.initialCost} onChange={set('initialCost')} className={inputCls} />
-            </label>
+
+        <fieldset className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
+          <legend className="px-1 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]">
+            Existencia inicial (opcional)
+          </legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Cantidad"
+              type="number"
+              step="0.001"
+              min="0"
+              value={form.initialQty}
+              onChange={set('initialQty')}
+              className="money"
+            />
+            <Field
+              label="Costo unitario (Q)"
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.initialCost}
+              onChange={set('initialCost')}
+              className="money"
+            />
           </div>
         </fieldset>
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <button disabled={busy} className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Guardando…' : 'Guardar producto'}
-        </button>
+
+        {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+        <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-5 w-full">
+          Guardar producto
+        </Button>
       </form>
     </Modal>
   );
 }
 
 function AdjustModal({
-  storeId,
-  product,
-  onClose,
-  onSaved,
+  storeId, product, onClose, onSaved,
 }: {
   storeId: string;
   product: ProductRow;
@@ -412,55 +379,53 @@ function AdjustModal({
       onSaved();
     } catch (e2) {
       setError(e2 instanceof ApiError ? e2.message : 'Error al ajustar');
-    } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title={`Ajustar: ${product.name}`} onClose={onClose}>
-      <p className="mb-3 text-sm text-slate-500">
-        Stock actual: <strong>{product.stockQty ?? '0'}</strong> {product.unit.code.toLowerCase()}
-      </p>
-      <form onSubmit={submit} className="space-y-3">
-        <label className="block text-sm font-medium text-slate-700">
-          Tipo de movimiento
-          <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
-            <option value="ADJUSTMENT_IN">Entrada por ajuste (conteo físico)</option>
-            <option value="ADJUSTMENT_OUT">Salida por ajuste (conteo físico)</option>
-            <option value="WASTE">Merma / vencido / dañado</option>
-            <option value="INTERNAL_USE">Consumo interno</option>
-          </select>
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
-          Cantidad
-          <input
-            required
-            type="number"
-            step={product.unit.allowsDecimals ? '0.001' : '1'}
-            min={product.unit.allowsDecimals ? '0.001' : '1'}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            className={inputCls}
-          />
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
-          Motivo * (obligatorio, queda en bitácora)
-          <input required minLength={3} value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} />
-        </label>
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <button disabled={busy} className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Registrando…' : 'Registrar ajuste'}
-        </button>
+    <Modal
+      title={`Ajustar: ${product.name}`}
+      description={`Existencia actual: ${product.stockQty ?? '0'} ${product.unit.code.toLowerCase()}`}
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <Select label="Tipo de movimiento" value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="ADJUSTMENT_IN">Entrada por ajuste (conteo físico)</option>
+          <option value="ADJUSTMENT_OUT">Salida por ajuste (conteo físico)</option>
+          <option value="WASTE">Merma / vencido / dañado</option>
+          <option value="INTERNAL_USE">Consumo interno</option>
+        </Select>
+        <Field
+          label="Cantidad"
+          type="number"
+          step={product.unit.allowsDecimals ? '0.001' : '1'}
+          min={product.unit.allowsDecimals ? '0.001' : '1'}
+          required
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="mt-3 money"
+        />
+        <Field
+          label="Motivo"
+          required
+          minLength={3}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="mt-3"
+          hint="Obligatorio: queda en la bitácora."
+        />
+        {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+        <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-5 w-full">
+          Registrar ajuste
+        </Button>
       </form>
     </Modal>
   );
 }
 
 function KardexModal({
-  storeId,
-  product,
-  onClose,
+  storeId, product, onClose,
 }: {
   storeId: string;
   product: ProductRow;
@@ -475,39 +440,53 @@ function KardexModal({
   }, [storeId, product.id]);
 
   return (
-    <Modal title={`Kardex: ${product.name}`} onClose={onClose}>
-      {rows === null && <p className="text-sm text-slate-400">Cargando…</p>}
-      {rows !== null && (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
-              <th className="py-2">Fecha</th>
-              <th className="py-2">Movimiento</th>
-              <th className="py-2 text-right">Cant.</th>
-              <th className="py-2 text-right">Saldo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((m) => (
-              <tr key={m.id} className="border-b border-slate-50">
-                <td className="py-2 text-xs text-slate-500">
-                  {new Date(m.createdAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })}
-                </td>
-                <td className="py-2">
-                  <span className="text-slate-700">{MOVEMENT_LABEL[m.type] ?? m.type}</span>
-                  {m.note && <div className="text-xs text-slate-400">{m.note}</div>}
-                </td>
-                <td className={`py-2 text-right font-medium ${Number(m.qty) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                  {Number(m.qty) > 0 ? '+' : ''}{m.qty}
-                </td>
-                <td className="py-2 text-right text-slate-700">{m.balanceAfter}</td>
+    <Modal title={`Kardex: ${product.name}`} onClose={onClose} wide>
+      {rows === null && <p className="py-8 text-center text-sm text-[hsl(var(--text-3))]">Cargando…</p>}
+      {rows !== null && rows.length === 0 && <Empty icon="productos">Sin movimientos</Empty>}
+      {rows !== null && rows.length > 0 && (
+        <div className="max-h-[26rem] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-[hsl(var(--surface-1))]">
+              <tr className="border-b border-white/[0.07] text-left text-[11px] uppercase tracking-wider text-[hsl(var(--text-3))]">
+                <th className="py-2 pr-3">Fecha</th>
+                <th className="py-2 pr-3">Movimiento</th>
+                <th className="py-2 text-right">Cantidad</th>
+                <th className="py-2 text-right">Saldo</th>
               </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={4} className="py-6 text-center text-slate-400">Sin movimientos</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((m) => (
+                <tr key={m.id} className="border-b border-white/[0.04] last:border-0">
+                  <td className="py-2 pr-3 text-xs text-[hsl(var(--text-3))]">
+                    {new Date(m.createdAt).toLocaleString('es-GT', {
+                      dateStyle: 'short',
+                      timeStyle: 'short',
+                    })}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <span className="text-[hsl(var(--text-1))]">
+                      {MOVEMENT_LABEL[m.type] ?? m.type}
+                    </span>
+                    {m.note && (
+                      <span className="block text-xs text-[hsl(var(--text-3))]">{m.note}</span>
+                    )}
+                  </td>
+                  <td
+                    className={`money py-2 text-right font-medium ${
+                      Number(m.qty) < 0 ? 'text-red-400' : 'text-emerald-300'
+                    }`}
+                  >
+                    {Number(m.qty) > 0 ? '+' : ''}
+                    {m.qty}
+                  </td>
+                  <td className="money py-2 text-right text-[hsl(var(--text-1))]">
+                    {m.balanceAfter}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Modal>
   );

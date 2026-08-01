@@ -1,11 +1,35 @@
 import { z } from 'zod';
 
 // ---- Auth ----
-export const loginSchema = z.object({
-  email: z.string().email('Email inválido').toLowerCase().trim(),
-  password: z.string().min(1, 'Contraseña requerida'),
-});
+/**
+ * Ingreso por NOMBRE DE USUARIO (D-036). Se sigue aceptando `email` para no
+ * romper integraciones existentes; ambos desembocan en el mismo identificador,
+ * y el servicio lo busca contra usuario o correo indistintamente.
+ */
+export const loginSchema = z
+  .object({
+    username: z.string().trim().min(1).max(60).optional(),
+    email: z.string().trim().max(120).optional(),
+    password: z.string().min(1, 'Contraseña requerida'),
+  })
+  .refine((v) => Boolean(v.username?.length || v.email?.length), {
+    message: 'Usuario requerido',
+    path: ['username'],
+  })
+  .transform((v) => ({
+    identifier: (v.username || v.email || '').toLowerCase().trim(),
+    password: v.password,
+  }));
 export type LoginInput = z.infer<typeof loginSchema>;
+
+/** Reglas del nombre de usuario al crearlo o cambiarlo. */
+export const usernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, 'Mínimo 3 caracteres')
+  .max(30, 'Máximo 30 caracteres')
+  .regex(/^[a-z0-9._-]+$/, 'Solo letras, números, punto, guion y guion bajo');
 
 export const refreshSchema = z.object({
   refreshToken: z.string().min(20),
@@ -273,6 +297,7 @@ export const tenantOnboardSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
   planCode: z.string().trim().min(2),
   ownerName: z.string().trim().min(2, 'Nombre del dueño requerido').max(80),
+  ownerUsername: usernameSchema.optional(), // si se omite, se deriva del correo
   ownerEmail: z.string().email('Correo inválido').toLowerCase().trim(),
   ownerPhone: z.string().trim().max(20).optional(),
   storeName: z.string().trim().min(2, 'Nombre de la tienda requerido').max(80),

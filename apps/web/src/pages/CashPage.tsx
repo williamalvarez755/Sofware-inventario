@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { formatQ, toCentavos } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { Nav } from '../components/Nav';
-import { ReceiptOverlay } from './PosPage';
+import { Icon } from '../components/Icon';
+import { Page } from '../components/Nav';
 import type { ReceiptData } from '../components/Receipt';
+import {
+  Badge,
+  Button,
+  Empty,
+  Field,
+  Modal,
+  Notice,
+  Panel,
+  SectionTitle,
+  Select,
+  cx,
+} from '../components/ui';
+import { ReceiptOverlay } from './PosPage';
 
 interface StoreOpt { id: string; name: string }
 interface RegisterOpt { id: string; name: string }
@@ -35,16 +48,13 @@ interface SaleRow {
 
 const MOVEMENT_LABEL: Record<string, string> = {
   OPENING: 'Apertura',
-  SALE_IN: 'Venta (efectivo)',
+  SALE_IN: 'Venta en efectivo',
   SALE_VOID_OUT: 'Devolución por anulación',
   WITHDRAWAL: 'Retiro',
   EXPENSE_OUT: 'Gasto',
   DEPOSIT_IN: 'Depósito',
   ADJUSTMENT: 'Ajuste',
 };
-
-const inputCls =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500';
 
 export function CashPage() {
   const { me } = useAuth();
@@ -79,22 +89,17 @@ export function CashPage() {
 
   const load = useCallback(async () => {
     if (!registerId) return;
-    const s = await api<SessionDetail | null>(
-      `/api/cash/sessions/current?registerId=${registerId}`,
-    );
+    const s = await api<SessionDetail | null>(`/api/cash/sessions/current?registerId=${registerId}`);
     setSession(s);
-    if (s) {
-      const list = await api<{ rows: SaleRow[] }>(
-        `/api/sales?storeId=${storeId}&sessionId=${s.id}`,
-      );
-      setSales(list.rows);
-    } else {
-      setSales([]);
-    }
+    setSales(
+      s
+        ? (await api<{ rows: SaleRow[] }>(`/api/sales?storeId=${storeId}&sessionId=${s.id}`)).rows
+        : [],
+    );
   }, [registerId, storeId]);
 
   useEffect(() => {
-    load().catch((e) => setError(e instanceof ApiError ? e.message : 'Error cargando caja'));
+    load().catch((e) => setError(e instanceof ApiError ? e.message : 'Error cargando la caja'));
   }, [load]);
 
   async function reprint(saleId: string) {
@@ -102,108 +107,148 @@ export function CashPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Nav />
-      <main className="mx-auto max-w-5xl p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold text-slate-800">Caja</h1>
-          <div className="ml-auto flex gap-2">
-            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className={inputCls + ' w-auto'}>
-              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <select value={registerId} onChange={(e) => setRegisterId(e.target.value)} className={inputCls + ' w-auto'}>
-              {registers.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </div>
+    <Page
+      title="Caja"
+      subtitle="Turno actual, movimientos y arqueo"
+      actions={
+        <>
+          <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label="Tienda" className="w-44">
+            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+          <Select value={registerId} onChange={(e) => setRegisterId(e.target.value)} aria-label="Caja" className="w-36">
+            {registers.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </Select>
+        </>
+      }
+    >
+      {error && <div className="mb-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+      {notice && (
+        <div className="mb-4">
+          <Notice tone="ok" icon="cheque" onClose={() => setNotice(null)}>{notice}</Notice>
         </div>
+      )}
 
-        {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {notice && (
-          <p className="mb-3 flex justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            {notice} <button onClick={() => setNotice(null)}>✕</button>
-          </p>
-        )}
+      {!session && (
+        <Panel className="p-10 text-center">
+          <Empty icon="caja">
+            No hay turno abierto en esta caja. Ábralo desde el punto de venta.
+          </Empty>
+        </Panel>
+      )}
 
-        {!session && (
-          <p className="rounded-xl bg-white p-8 text-center text-slate-400 shadow-sm">
-            No hay sesión abierta en esta caja. Ábrala desde la pantalla <strong>POS</strong>.
-          </p>
-        )}
-
-        {session && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-xl bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="font-bold text-slate-800">Turno actual</h2>
-                  <p className="text-sm text-slate-500">
-                    Abierto {new Date(session.openedAt).toLocaleString('es-GT', { dateStyle: 'short', timeStyle: 'short' })}
-                    {' · '}{session.salesCount} venta(s)
-                  </p>
+      {session && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Panel className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                  <h2 className="font-display text-[15px] font-semibold text-[hsl(var(--text-1))]">
+                    Turno abierto
+                  </h2>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs uppercase text-slate-400">Efectivo esperado</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatQ(BigInt(session.expectedSoFar))}</p>
-                </div>
+                <p className="mt-1 text-xs text-[hsl(var(--text-3))]">
+                  Desde{' '}
+                  {new Date(session.openedAt).toLocaleString('es-GT', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                  })}{' '}
+                  · {session.salesCount} venta(s)
+                </p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => setModal('withdraw')} className="rounded-lg border border-amber-500 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50">
-                  Retiro
-                </button>
-                <button onClick={() => setModal('deposit')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-                  Depósito
-                </button>
-                <button onClick={() => setModal('close')} className="ml-auto rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900">
-                  Cerrar caja
-                </button>
+              <div className="text-right">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]">
+                  Efectivo esperado
+                </p>
+                <p className="money text-2xl font-semibold text-[hsl(var(--text-1))]">
+                  {formatQ(BigInt(session.expectedSoFar))}
+                </p>
               </div>
+            </div>
 
-              <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Movimientos</h3>
-              <div className="mt-2 max-h-72 overflow-y-auto">
-                {session.movements.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between border-b border-slate-50 py-2 text-sm">
-                    <div>
-                      <p className="text-slate-700">{MOVEMENT_LABEL[m.type] ?? m.type}</p>
-                      {m.reason && <p className="text-xs text-slate-400">{m.reason}</p>}
-                    </div>
-                    <span className={BigInt(m.amount) < 0n ? 'font-medium text-red-600' : 'font-medium text-emerald-700'}>
-                      {formatQ(BigInt(m.amount))}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" icon="menos" onClick={() => setModal('withdraw')}>
+                Retiro
+              </Button>
+              <Button size="sm" variant="outline" icon="mas" onClick={() => setModal('deposit')}>
+                Depósito
+              </Button>
+              <Button size="sm" variant="primary" className="ml-auto" onClick={() => setModal('close')}>
+                Cerrar caja
+              </Button>
+            </div>
 
-            <section className="rounded-xl bg-white p-5 shadow-sm">
-              <h2 className="font-bold text-slate-800">Ventas del turno</h2>
-              <div className="mt-2 max-h-96 overflow-y-auto">
-                {sales.length === 0 && <p className="py-6 text-center text-sm text-slate-400">Sin ventas aún</p>}
-                {sales.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between border-b border-slate-50 py-2 text-sm">
-                    <div>
-                      <p className={s.status === 'VOIDED' ? 'text-slate-400 line-through' : 'text-slate-700'}>
-                        #{s.number} · {new Date(s.createdAt).toLocaleTimeString('es-GT', { timeStyle: 'short' })}
-                      </p>
-                      {s.status === 'VOIDED' && <p className="text-xs text-red-500">Anulada</p>}
+            <div className="mt-5">
+              <SectionTitle>Movimientos</SectionTitle>
+              <div className="max-h-80 divide-y divide-white/[0.05] overflow-y-auto">
+                {session.movements.map((m) => {
+                  const negative = BigInt(m.amount) < 0n;
+                  return (
+                    <div key={m.id} className="flex items-center justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-sm text-[hsl(var(--text-1))]">
+                          {MOVEMENT_LABEL[m.type] ?? m.type}
+                        </p>
+                        {m.reason && (
+                          <p className="truncate text-xs text-[hsl(var(--text-3))]">{m.reason}</p>
+                        )}
+                      </div>
+                      <span
+                        className={cx(
+                          'money shrink-0 text-sm font-semibold',
+                          negative ? 'text-red-400' : 'text-emerald-300',
+                        )}
+                      >
+                        {formatQ(BigInt(m.amount))}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-800">{formatQ(BigInt(s.total))}</span>
-                      <button onClick={() => reprint(s.id)} className="text-xs font-medium text-slate-500 hover:text-slate-700">
-                        Reimprimir
-                      </button>
-                      {s.status === 'COMPLETED' && (
-                        <button onClick={() => setVoidTarget(s)} className="text-xs font-medium text-red-600 hover:text-red-800">
-                          Anular
-                        </button>
+                  );
+                })}
+              </div>
+            </div>
+          </Panel>
+
+          <Panel className="p-5">
+            <SectionTitle>Ventas del turno</SectionTitle>
+            <div className="max-h-[28rem] divide-y divide-white/[0.05] overflow-y-auto">
+              {sales.length === 0 && <Empty icon="punto-venta">Sin ventas aún</Empty>}
+              {sales.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <p
+                      className={cx(
+                        'money text-sm',
+                        s.status === 'VOIDED'
+                          ? 'text-[hsl(var(--text-3))] line-through'
+                          : 'text-[hsl(var(--text-1))]',
                       )}
-                    </div>
+                    >
+                      No. {s.number}
+                    </p>
+                    <p className="text-xs text-[hsl(var(--text-3))]">
+                      {new Date(s.createdAt).toLocaleTimeString('es-GT', { timeStyle: 'short' })}
+                      {s.status === 'VOIDED' && ' · anulada'}
+                    </p>
                   </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        )}
-      </main>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="money text-sm font-semibold text-[hsl(var(--text-1))]">
+                      {formatQ(BigInt(s.total))}
+                    </span>
+                    <Button size="sm" variant="ghost" icon="imprimir" onClick={() => reprint(s.id)}>
+                      <span className="sr-only">Reimprimir</span>
+                    </Button>
+                    {s.status === 'COMPLETED' && (
+                      <Button size="sm" variant="danger" onClick={() => setVoidTarget(s)}>
+                        Anular
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      )}
 
       {modal && session && (
         <CashModal
@@ -231,7 +276,39 @@ export function CashPage() {
         />
       )}
       {receipt && <ReceiptOverlay data={receipt} onClose={() => setReceipt(null)} />}
-    </div>
+    </Page>
+  );
+}
+
+function AuthorizerFields({
+  email, pin, onEmail, onPin,
+}: {
+  email: string;
+  pin: string;
+  onEmail: (v: string) => void;
+  onPin: (v: string) => void;
+}) {
+  return (
+    <fieldset className="mt-4 rounded-xl border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.07)] p-4">
+      <legend className="flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--accent-strong))]">
+        <Icon name="candado" size={13} /> Autorización de supervisor
+      </legend>
+      <Field
+        type="email"
+        required
+        placeholder="Correo del supervisor"
+        value={email}
+        onChange={(e) => onEmail(e.target.value)}
+      />
+      <Field
+        type="password"
+        required
+        placeholder="PIN"
+        value={pin}
+        onChange={(e) => onPin(e.target.value)}
+        className="mt-2 money"
+      />
+    </fieldset>
   );
 }
 
@@ -251,32 +328,47 @@ function CashModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const titles = { withdraw: 'Retiro de efectivo', deposit: 'Depósito a caja', close: 'Cerrar caja (arqueo)' };
+  const titles = {
+    withdraw: 'Retiro de efectivo',
+    deposit: 'Depósito a caja',
+    close: 'Cerrar caja',
+  };
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
       if (kind === 'close') {
-        const res = await api<{ expectedAmount: string; countedAmount: string; difference: string }>(
-          `/api/cash/sessions/${session.id}/close`,
-          { method: 'POST', body: JSON.stringify({ countedAmount: toCentavos(amount || '0') }) },
-        );
+        const res = await api<{
+          expectedAmount: string;
+          countedAmount: string;
+          difference: string;
+        }>(`/api/cash/sessions/${session.id}/close`, {
+          method: 'POST',
+          body: JSON.stringify({ countedAmount: toCentavos(amount || '0') }),
+        });
         const diff = BigInt(res.difference);
         onDone(
           `Caja cerrada. Esperado ${formatQ(BigInt(res.expectedAmount))}, contado ${formatQ(BigInt(res.countedAmount))} → ` +
-            (diff === 0n ? 'cuadre exacto ✔' : diff > 0n ? `sobrante ${formatQ(diff)}` : `faltante ${formatQ(-diff)}`),
+            (diff === 0n
+              ? 'cuadre exacto'
+              : diff > 0n
+                ? `sobrante ${formatQ(diff)}`
+                : `faltante ${formatQ(-diff)}`),
         );
       } else {
-        await api(`/api/cash/sessions/${session.id}/${kind === 'withdraw' ? 'withdrawals' : 'deposits'}`, {
-          method: 'POST',
-          body: JSON.stringify({
-            amount: toCentavos(amount || '0'),
-            reason,
-            ...(needsPin ? { authorizerEmail, authorizerPin } : {}),
-          }),
-        });
+        await api(
+          `/api/cash/sessions/${session.id}/${kind === 'withdraw' ? 'withdrawals' : 'deposits'}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              amount: toCentavos(amount || '0'),
+              reason,
+              ...(needsPin ? { authorizerEmail, authorizerPin } : {}),
+            }),
+          },
+        );
         onDone(kind === 'withdraw' ? 'Retiro registrado' : 'Depósito registrado');
       }
     } catch (e2) {
@@ -286,37 +378,52 @@ function CashModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-bold text-slate-800">{titles[kind]}</h2>
-        {kind === 'close' && (
-          <p className="mt-1 text-sm text-slate-500">
-            Cuente el efectivo físico. Esperado: <strong>{formatQ(BigInt(session.expectedSoFar))}</strong>
-          </p>
-        )}
-        <label className="mt-3 block text-sm font-medium text-slate-700">
-          {kind === 'close' ? 'Efectivo contado (Q)' : 'Monto (Q)'}
-          <input type="number" step="0.01" min="0" required autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} className={inputCls + ' mt-1'} />
-        </label>
+    <Modal
+      title={titles[kind]}
+      description={
+        kind === 'close'
+          ? `Cuente el efectivo físico. Esperado: ${formatQ(BigInt(session.expectedSoFar))}`
+          : undefined
+      }
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <Field
+          label={kind === 'close' ? 'Efectivo contado (Q)' : 'Monto (Q)'}
+          type="number"
+          step="0.01"
+          min="0"
+          required
+          autoFocus
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="money"
+        />
         {kind !== 'close' && (
-          <label className="mt-3 block text-sm font-medium text-slate-700">
-            Motivo * (queda en bitácora)
-            <input required minLength={3} value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls + ' mt-1'} />
-          </label>
+          <Field
+            label="Motivo"
+            required
+            minLength={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="mt-3"
+            hint="Obligatorio: queda en la bitácora."
+          />
         )}
         {needsPin && kind === 'withdraw' && (
-          <fieldset className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <legend className="px-1 text-xs font-semibold uppercase text-amber-700">Autorización de supervisor</legend>
-            <input type="email" required placeholder="Correo del supervisor" value={authorizerEmail} onChange={(e) => setAuthorizerEmail(e.target.value)} className={inputCls} />
-            <input type="password" required placeholder="PIN" value={authorizerPin} onChange={(e) => setAuthorizerPin(e.target.value)} className={inputCls + ' mt-2'} />
-          </fieldset>
+          <AuthorizerFields
+            email={authorizerEmail}
+            pin={authorizerPin}
+            onEmail={setAuthorizerEmail}
+            onPin={setAuthorizerPin}
+          />
         )}
-        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <button disabled={busy} className="mt-4 w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Procesando…' : 'Confirmar'}
-        </button>
+        {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+        <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-5 w-full">
+          Confirmar
+        </Button>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -334,7 +441,7 @@ function VoidModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
@@ -354,28 +461,34 @@ function VoidModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-bold text-slate-800">Anular venta #{sale.number}</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Total {formatQ(BigInt(sale.total))}. Repone el inventario y devuelve el efectivo en caja.
-        </p>
-        <label className="mt-3 block text-sm font-medium text-slate-700">
-          Motivo * (queda en bitácora)
-          <input required minLength={3} autoFocus value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls + ' mt-1'} />
-        </label>
+    <Modal
+      title={`Anular venta No. ${sale.number}`}
+      description={`Total ${formatQ(BigInt(sale.total))}. Repone el inventario y devuelve el efectivo.`}
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <Field
+          label="Motivo"
+          required
+          minLength={3}
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          hint="Obligatorio: queda en la bitácora."
+        />
         {needsPin && (
-          <fieldset className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <legend className="px-1 text-xs font-semibold uppercase text-amber-700">Autorización de supervisor</legend>
-            <input type="email" required placeholder="Correo del supervisor" value={authorizerEmail} onChange={(e) => setAuthorizerEmail(e.target.value)} className={inputCls} />
-            <input type="password" required placeholder="PIN" value={authorizerPin} onChange={(e) => setAuthorizerPin(e.target.value)} className={inputCls + ' mt-2'} />
-          </fieldset>
+          <AuthorizerFields
+            email={authorizerEmail}
+            pin={authorizerPin}
+            onEmail={setAuthorizerEmail}
+            onPin={setAuthorizerPin}
+          />
         )}
-        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <button disabled={busy} className="mt-4 w-full rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
-          {busy ? 'Anulando…' : 'Anular venta'}
-        </button>
+        {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+        <Button type="submit" variant="danger" size="lg" loading={busy} className="mt-5 w-full">
+          Anular venta
+        </Button>
       </form>
-    </div>
+    </Modal>
   );
 }

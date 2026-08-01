@@ -16,7 +16,7 @@ import {
 } from '@minimarket/shared';
 import { AppError, notFound } from '../../lib/errors.js';
 import { prismaRuntime, withTenantTx, type TenantClient } from '../../lib/prisma.js';
-import type { MembershipLike } from '../../lib/store-access.js';
+import { assertStoreAccess, type MembershipLike } from '../../lib/store-access.js';
 import { audit } from '../audit/audit.service.js';
 import { verifyAuthorizer } from '../auth/pin.service.js';
 import { applyMovement } from '../inventory/movements.service.js';
@@ -241,6 +241,10 @@ export function voidSale(
     if (sale.status === 'VOIDED') {
       throw new AppError(409, 'ALREADY_VOIDED', 'La venta ya está anulada');
     }
+    // Quien anula debe pertenecer a la tienda de la venta: el PIN del
+    // supervisor autoriza la operación, pero no habilita a operar en una
+    // sucursal ajena.
+    assertStoreAccess(memberships, sale.store_id);
 
     const selfAuthorized = memberships.some(
       (m) =>

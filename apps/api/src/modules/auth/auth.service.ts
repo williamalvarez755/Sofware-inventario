@@ -59,9 +59,10 @@ async function issueTokens(principal: {
   return { accessToken, refreshToken: token };
 }
 
-export async function loginTenantUser(email: string, password: string, req: Request) {
-  const user = await prismaAdmin.user.findUnique({
-    where: { email },
+/** `identifier` es el nombre de usuario o, por compatibilidad, el correo. */
+export async function loginTenantUser(identifier: string, password: string, req: Request) {
+  const user = await prismaAdmin.user.findFirst({
+    where: { OR: [{ username: identifier }, { email: identifier }] },
     include: { tenant: { select: { id: true, name: true, status: true } } },
   });
   const passwordOk = user && (await argon2.verify(user.passwordHash, password));
@@ -70,7 +71,7 @@ export async function loginTenantUser(email: string, password: string, req: Requ
       tenantId: user?.tenantId,
       userId: user?.id,
       action: 'auth.login_failed',
-      after: { email },
+      after: { identifier },
     }, req);
     throw unauthorized();
   }
@@ -199,14 +200,16 @@ export async function completeTwoFactorLogin(
   };
 }
 
-export async function loginPlatformUser(email: string, password: string, req: Request) {
-  const admin = await prismaAdmin.platformUser.findUnique({ where: { email } });
+export async function loginPlatformUser(identifier: string, password: string, req: Request) {
+  const admin = await prismaAdmin.platformUser.findFirst({
+    where: { OR: [{ username: identifier }, { email: identifier }] },
+  });
   const passwordOk = admin && (await argon2.verify(admin.passwordHash, password));
   if (!admin || !admin.isActive || !passwordOk) {
     await audit(prismaAdmin, {
       platformUserId: admin?.id,
       action: 'platform.login_failed',
-      after: { email },
+      after: { identifier },
     }, req);
     throw unauthorized();
   }

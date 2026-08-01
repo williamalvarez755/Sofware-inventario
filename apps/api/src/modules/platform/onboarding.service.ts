@@ -39,13 +39,26 @@ export async function onboardTenant(
   const plan = await prismaAdmin.plan.findUnique({ where: { code: input.planCode } });
   if (!plan) throw notFound('Plan no encontrado');
 
-  const [slugTaken, emailTaken] = await Promise.all([
+  // Si no se indicó usuario, se deriva del correo (parte antes del arroba).
+  const desiredUsername =
+    input.ownerUsername ??
+    input.ownerEmail.split('@')[0]!.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+
+  const [slugTaken, emailTaken, usernameTaken] = await Promise.all([
     prismaAdmin.tenant.findUnique({ where: { slug: input.slug }, select: { id: true } }),
     prismaAdmin.user.findUnique({ where: { email: input.ownerEmail }, select: { id: true } }),
+    prismaAdmin.user.findUnique({ where: { username: desiredUsername }, select: { id: true } }),
   ]);
   if (slugTaken) throw new AppError(409, 'SLUG_TAKEN', 'Ese identificador ya está en uso');
   if (emailTaken) {
     throw new AppError(409, 'EMAIL_TAKEN', 'Ese correo ya pertenece a un usuario del sistema');
+  }
+  if (usernameTaken) {
+    throw new AppError(
+      409,
+      'USERNAME_TAKEN',
+      `El usuario "${desiredUsername}" ya existe. Indique uno distinto.`,
+    );
   }
 
   const password = temporaryPassword();
@@ -71,6 +84,7 @@ export async function onboardTenant(
       data: {
         id: userId,
         tenantId,
+        username: desiredUsername,
         email: input.ownerEmail,
         name: input.ownerName,
         phone: input.ownerPhone ?? null,
@@ -123,7 +137,7 @@ export async function onboardTenant(
         name: input.name,
         slug: input.slug,
         plan: plan.code,
-        owner: input.ownerEmail,
+        owner: desiredUsername,
         store: input.storeName,
         trialDays: input.trialDays,
       },
@@ -134,7 +148,11 @@ export async function onboardTenant(
   return {
     tenantId,
     slug: input.slug,
-    owner: { email: input.ownerEmail, temporaryPassword: password },
+    owner: {
+      username: desiredUsername,
+      email: input.ownerEmail,
+      temporaryPassword: password,
+    },
     storeId,
     plan: plan.code,
   };

@@ -9,18 +9,17 @@ export interface DayPoint {
 }
 
 /**
- * Ventas por día — barras (magnitud sobre días discretos), una sola serie:
- * el título la nombra, así que no lleva leyenda. Extremos redondeados de 4px
- * anclados a la línea base, separación de 2px entre barras, ejes recesivos y
- * tooltip por barra. Etiquetas directas solo en el máximo, no en cada barra.
- * El color (emerald-600) está validado: ≥3:1 sobre la superficie blanca.
+ * Ventas por día — barras (magnitud sobre días discretos), una sola serie: el
+ * título la nombra, así que no lleva leyenda. Extremos redondeados anclados a
+ * la línea base, separación entre barras, ejes recesivos y tooltip por barra.
+ * El color es el acento del tema, así que sigue al usuario.
  */
 export function SalesChart({ data }: { data: DayPoint[] }) {
   const [hover, setHover] = useState<number | null>(null);
 
   if (data.length === 0) {
     return (
-      <p className="py-12 text-center text-sm text-slate-400">
+      <p className="py-14 text-center text-sm text-[hsl(var(--text-3))]">
         Sin ventas en el periodo seleccionado
       </p>
     );
@@ -31,22 +30,26 @@ export function SalesChart({ data }: { data: DayPoint[] }) {
   const peak = values.indexOf(max);
 
   const W = 720;
-  const H = 200;
-  const padBottom = 26;
-  const padTop = 18;
+  const H = 210;
+  const padBottom = 28;
+  const padTop = 22;
   const plotH = H - padBottom - padTop;
   const slot = W / data.length;
-  const gap = Math.min(10, slot * 0.25); // deja al menos 2px de superficie
-  // Tope de ancho: con uno o dos días de datos, sin él la barra se ve como una
-  // losa que ocupa el gráfico entero (el caso del primer día de uso real).
-  const barW = Math.min(72, Math.max(3, slot - gap));
-  // Solo 5 rótulos de fecha como máximo: más se amontonan en pantallas de tienda.
-  const labelEvery = Math.ceil(data.length / 5);
+  const gap = Math.min(12, slot * 0.28);
+  // Tope de ancho: con uno o dos días la barra se vería como una losa.
+  const barW = Math.min(64, Math.max(3, slot - gap));
+  const labelEvery = Math.ceil(data.length / 6);
 
   return (
     <div className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Ventas por día">
-        {/* Grid recesivo: 3 líneas guía */}
+        <defs>
+          <linearGradient id="barra" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(var(--accent-strong))" />
+            <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0.55" />
+          </linearGradient>
+        </defs>
+
         {[0.5, 1].map((f) => (
           <line
             key={f}
@@ -54,17 +57,26 @@ export function SalesChart({ data }: { data: DayPoint[] }) {
             x2={W}
             y1={padTop + plotH * (1 - f)}
             y2={padTop + plotH * (1 - f)}
-            stroke="#e2e8f0"
+            stroke="hsl(var(--border))"
             strokeWidth={1}
+            strokeDasharray="3 5"
           />
         ))}
-        <line x1={0} x2={W} y1={padTop + plotH} y2={padTop + plotH} stroke="#cbd5e1" strokeWidth={1} />
+        <line
+          x1={0}
+          x2={W}
+          y1={padTop + plotH}
+          y2={padTop + plotH}
+          stroke="hsl(var(--border))"
+          strokeWidth={1}
+        />
 
         {data.map((d, i) => {
           const value = Number(d.salesTotal);
-          const h = Math.max(2, (value / max) * plotH);
-          const x = i * slot + (slot - barW) / 2; // centrada en su día
+          const h = Math.max(3, (value / max) * plotH);
+          const x = i * slot + (slot - barW) / 2;
           const y = padTop + plotH - h;
+          const dim = hover !== null && hover !== i;
           return (
             <g key={d.day}>
               <rect
@@ -72,11 +84,11 @@ export function SalesChart({ data }: { data: DayPoint[] }) {
                 y={y}
                 width={barW}
                 height={h}
-                rx={4}
-                fill="#059669"
-                opacity={hover === null || hover === i ? 1 : 0.45}
+                rx={5}
+                fill="url(#barra)"
+                opacity={dim ? 0.35 : 1}
+                style={{ transition: 'opacity .15s' }}
               />
-              {/* Zona de interacción más grande que la barra */}
               <rect
                 x={i * slot}
                 y={padTop}
@@ -87,12 +99,26 @@ export function SalesChart({ data }: { data: DayPoint[] }) {
                 onMouseLeave={() => setHover(null)}
               />
               {i === peak && (
-                <text x={x + barW / 2} y={y - 5} textAnchor="middle" className="fill-slate-600 text-[11px] font-semibold">
+                <text
+                  x={x + barW / 2}
+                  y={y - 7}
+                  textAnchor="middle"
+                  className="money"
+                  fill="hsl(var(--text-2))"
+                  fontSize="11"
+                  fontWeight="600"
+                >
                   {formatQ(BigInt(d.salesTotal))}
                 </text>
               )}
               {i % labelEvery === 0 && (
-                <text x={x + barW / 2} y={H - 8} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                <text
+                  x={x + barW / 2}
+                  y={H - 9}
+                  textAnchor="middle"
+                  fill="hsl(var(--text-3))"
+                  fontSize="10"
+                >
                   {d.day.slice(5).replace('-', '/')}
                 </text>
               )}
@@ -102,17 +128,19 @@ export function SalesChart({ data }: { data: DayPoint[] }) {
       </svg>
 
       {hover !== null && data[hover] && (
-        <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs text-white shadow-lg">
-          <div className="font-semibold">
+        <div className="glass pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-xl px-3 py-2 text-xs">
+          <div className="font-medium text-[hsl(var(--text-1))]">
             {new Date(`${data[hover]!.day}T12:00:00`).toLocaleDateString('es-GT', {
-              weekday: 'short',
+              weekday: 'long',
               day: 'numeric',
               month: 'short',
             })}
           </div>
-          <div>{formatQ(BigInt(data[hover]!.salesTotal))} · {data[hover]!.salesCount} venta(s)</div>
+          <div className="money text-[hsl(var(--text-2))]">
+            {formatQ(BigInt(data[hover]!.salesTotal))} · {data[hover]!.salesCount} venta(s)
+          </div>
           {data[hover]!.profitTotal && (
-            <div className="text-emerald-300">
+            <div className="money text-[hsl(var(--accent-strong))]">
               Utilidad {formatQ(BigInt(data[hover]!.profitTotal!))}
             </div>
           )}

@@ -45,10 +45,15 @@ function message(text: string): Partial<Options> {
   };
 }
 
-/** Combina la conexión con la cuenta que se está intentando abrir. */
+/**
+ * Combina la conexión con la cuenta que se está intentando abrir.
+ * Corre ANTES de la validación, así que lee el cuerpo crudo: acepta tanto
+ * `username` (lo que envía la app) como `email` (compatibilidad).
+ */
 export function accountKey(req: Request): string {
-  const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-  return `${ipKey(req)}|${email}`;
+  const raw = req.body?.username ?? req.body?.email;
+  const account = typeof raw === 'string' ? raw.toLowerCase().trim() : '';
+  return `${ipKey(req)}|${account}`;
 }
 
 /** Intentos de contraseña contra UNA cuenta desde una conexión. */

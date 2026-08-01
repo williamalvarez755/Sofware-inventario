@@ -78,9 +78,10 @@ async function seedPlans() {
 async function seedPlatformUser() {
   await prisma.platformUser.upsert({
     where: { email: SUPER_EMAIL },
-    update: {},
+    update: { username: 'superadmin' },
     create: {
       id: uuidv7(),
+      username: 'superadmin',
       email: SUPER_EMAIL,
       name: 'Super Admin',
       passwordHash: await argon2.hash(SUPER_PASSWORD),
@@ -111,12 +112,18 @@ async function seedDemoTenant(opts: {
     },
   });
 
+  // El usuario de ingreso es la parte del correo antes del arroba:
+  // owner1@demo.local → "owner1". Corto y fácil de teclear en el mostrador.
+  const ownerUsername = opts.ownerEmail.split('@')[0]!;
+  const workerUsername = opts.workerEmail.split('@')[0]!;
+
   const owner = await prisma.user.upsert({
     where: { email: opts.ownerEmail },
-    update: { supervisorPinHash },
+    update: { supervisorPinHash, username: ownerUsername },
     create: {
       id: uuidv7(),
       tenantId: tenant.id,
+      username: ownerUsername,
       email: opts.ownerEmail,
       name: `Dueño ${opts.name}`,
       passwordHash,
@@ -126,10 +133,11 @@ async function seedDemoTenant(opts: {
   });
   const worker = await prisma.user.upsert({
     where: { email: opts.workerEmail },
-    update: {},
+    update: { username: workerUsername },
     create: {
       id: uuidv7(),
       tenantId: tenant.id,
+      username: workerUsername,
       email: opts.workerEmail,
       name: `Trabajador ${opts.name}`,
       passwordHash,

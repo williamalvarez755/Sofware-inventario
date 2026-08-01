@@ -2,12 +2,18 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { Icon } from '../components/Icon';
+import { ThemePicker } from '../components/ThemePicker';
+import { Button, Field, Notice, Panel } from '../components/ui';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, completeTwoFactor } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  /** Presente cuando el usuario tiene verificación en dos pasos activa. */
+  const [challenge, setChallenge] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -16,56 +22,147 @@ export function LoginPage() {
     setError(null);
     setBusy(true);
     try {
-      await login(email, password);
-      navigate('/', { replace: true });
+      if (challenge) {
+        await completeTwoFactor(challenge, code);
+        navigate('/', { replace: true });
+        return;
+      }
+      const outcome = await login(username.trim(), password);
+      if (outcome.kind === 'segundo-factor') {
+        setChallenge(outcome.challengeToken);
+        setCode('');
+      } else {
+        navigate('/', { replace: true });
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo conectar con el servidor');
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo conectar con el servidor',
+      );
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg">
-        <h1 className="text-2xl font-bold text-slate-800">MiniMarket POS</h1>
-        <p className="mt-1 text-sm text-slate-500">Inicie sesión para operar su tienda</p>
+    <div className="relative flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="absolute right-4 top-4">
+        <ThemePicker />
+      </div>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Correo</span>
-            <input
-              type="email"
-              required
-              autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Contraseña</span>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-          </label>
+      <div className="surgir w-full max-w-[26rem]">
+        {/* Marca: la caja registradora dentro de un cuadro de vidrio. */}
+        <div className="mb-7 flex flex-col items-center text-center">
+          <span className="glass mb-4 flex size-14 items-center justify-center rounded-2xl text-[hsl(var(--accent))]">
+            <Icon name="caja" size={26} />
+          </span>
+          <h1 className="font-display text-[26px] font-semibold tracking-tight text-[hsl(var(--text-1))]">
+            MiniMarket
+          </h1>
+          <p className="mt-1 text-sm text-[hsl(var(--text-3))]">
+            Punto de venta, inventario y caja
+          </p>
+        </div>
 
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <Panel as="form" className="p-6" onSubmit={onSubmit}>
+          {challenge ? (
+            <>
+              <div className="mb-4 flex items-center gap-3">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent-strong))]">
+                  <Icon name="escudo" size={20} />
+                </span>
+                <div>
+                  <h2 className="font-display text-base font-semibold text-[hsl(var(--text-1))]">
+                    Verificación en dos pasos
+                  </h2>
+                  <p className="text-xs text-[hsl(var(--text-3))]">
+                    Escriba el código de su aplicación
+                  </p>
+                </div>
+              </div>
+              <Field
+                label="Código de 6 dígitos"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                autoFocus
+                required
+                className="money"
+                hint="También sirve uno de sus códigos de recuperación."
+              />
+            </>
+          ) : (
+            <div className="space-y-4">
+              <Field
+                label="Usuario"
+                icon="usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="su usuario"
+                autoFocus
+                required
+              />
+              <Field
+                label="Contraseña"
+                icon="candado"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                required
+              />
+            </div>
           )}
 
-          <button
+          {error && (
+            <div className="mt-4">
+              <Notice tone="danger" icon="alerta">
+                {error}
+              </Notice>
+            </div>
+          )}
+
+          <Button
             type="submit"
-            disabled={busy}
-            className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+            variant="primary"
+            size="lg"
+            loading={busy}
+            iconRight="flecha-derecha"
+            className="mt-5 w-full"
           >
-            {busy ? 'Ingresando…' : 'Ingresar'}
-          </button>
-        </form>
+            {challenge ? 'Verificar' : 'Entrar'}
+          </Button>
+
+          {challenge && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2 w-full"
+              onClick={() => {
+                setChallenge(null);
+                setError(null);
+              }}
+            >
+              Usar otra cuenta
+            </Button>
+          )}
+        </Panel>
+
+        <p className="mt-6 text-center text-xs text-[hsl(var(--text-3))]">
+          ¿Administra la plataforma?{' '}
+          <a
+            href="/plataforma/login"
+            className="font-medium text-[hsl(var(--accent-strong))] hover:underline"
+          >
+            Entrar como super admin
+          </a>
+        </p>
       </div>
     </div>
   );

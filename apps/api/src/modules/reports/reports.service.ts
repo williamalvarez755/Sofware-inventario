@@ -36,6 +36,25 @@ function storeFilter(column: Prisma.Sql, storeIds: string[]): Prisma.Sql {
   return Prisma.sql`${column} = ANY(${storeIds}::uuid[])`;
 }
 
+/**
+ * Ingreso NETO de una línea de venta.
+ *
+ * El descuento se registra en el encabezado (`sales.discount`), no en la línea,
+ * así que sumar `line_total` a secas **inflaría** los ingresos y la utilidad de
+ * cualquier venta con descuento. Aquí se reparte el descuento en proporción al
+ * peso de cada línea.
+ *
+ * La suma es exacta a nivel de venta —las líneas de una venta suman su
+ * subtotal, así que el reparto devuelve justo `total`— y a nivel de producto es
+ * la única atribución defendible. El único margen es el redondeo final de cada
+ * grupo, de a lo sumo un centavo.
+ */
+const NET_LINE = Prisma.sql`
+  (si.line_total - si.line_total * s.discount::numeric / NULLIF(s.subtotal, 0))`;
+
+/** Costo de la línea (el descuento no altera lo que costó la mercadería). */
+const LINE_COST = Prisma.sql`(si.qty * si.unit_cost_at_sale)`;
+
 // ─────────────────────────── Dashboard ───────────────────────────
 
 export interface DashboardTotals {
@@ -95,8 +114,8 @@ export function getDashboard(tenantId: string, params: RangeParams, includeCosts
       SELECT
         (s.created_at AT TIME ZONE ${TZ})::date AS day,
         COUNT(DISTINCT s.id)::int AS sales_count,
-        COALESCE(SUM(si.line_total), 0)::bigint AS sales_total,
-        COALESCE(ROUND(SUM(si.line_total - si.qty * si.unit_cost_at_sale)), 0)::bigint AS profit_total
+        COALESCE(ROUND(SUM(${NET_LINE})), 0)::bigint AS sales_total,
+        COALESCE(ROUND(SUM(${NET_LINE} - ${LINE_COST})), 0)::bigint AS profit_total
       FROM sales s
       JOIN sale_items si ON si.sale_id = s.id
       WHERE s.status = 'COMPLETED'
@@ -148,9 +167,9 @@ export function getProfitByProduct(tenantId: string, params: RangeParams) {
     >(Prisma.sql`
       SELECT p.id AS product_id, p.name, p.sku, c.name AS category,
              SUM(si.qty)::text AS qty,
-             SUM(si.line_total)::bigint AS revenue,
-             ROUND(SUM(si.qty * si.unit_cost_at_sale))::bigint AS cost,
-             ROUND(SUM(si.line_total - si.qty * si.unit_cost_at_sale))::bigint AS profit
+             ROUND(SUM(${NET_LINE}))::bigint AS revenue,
+             ROUND(SUM(${LINE_COST}))::bigint AS cost,
+             ROUND(SUM(${NET_LINE} - ${LINE_COST}))::bigint AS profit
       FROM sale_items si
       JOIN sales s ON s.id = si.sale_id
       JOIN products p ON p.id = si.product_id
@@ -230,8 +249,8 @@ export function getSalesReport(
     >(Prisma.sql`
       SELECT ${dim.key} AS key, ${dim.label} AS label,
              COUNT(DISTINCT s.id)::int AS sales_count,
-             SUM(si.line_total)::bigint AS total,
-             ROUND(SUM(si.line_total - si.qty * si.unit_cost_at_sale))::bigint AS profit
+             ROUND(SUM(${NET_LINE}))::bigint AS total,
+             ROUND(SUM(${NET_LINE} - ${LINE_COST}))::bigint AS profit
       FROM sales s
       JOIN sale_items si ON si.sale_id = s.id
       ${dim.join}
@@ -517,9 +536,9 @@ export function getFinancialSummary(tenantId: string, params: RangeParams) {
       LEFT JOIN (
         SELECT s.store_id,
                COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'COMPLETED') AS sales_count,
-               COALESCE(SUM(si.line_total) FILTER (WHERE s.status = 'COMPLETED'), 0) AS sales_total,
-               COALESCE(ROUND(SUM(si.qty * si.unit_cost_at_sale) FILTER (WHERE s.status = 'COMPLETED')), 0) AS cost_total,
-               COALESCE(SUM(si.line_total) FILTER (WHERE s.status = 'VOIDED'), 0) AS voided_total
+               COALESCE(ROUND(SUM(${NET_LINE}) FILTER (WHERE s.status = 'COMPLETED')), 0) AS sales_total,
+               COALESCE(ROUND(SUM(${LINE_COST}) FILTER (WHERE s.status = 'COMPLETED')), 0) AS cost_total,
+               COALESCE(ROUND(SUM(${NET_LINE}) FILTER (WHERE s.status = 'VOIDED')), 0) AS voided_total
         FROM sales s JOIN sale_items si ON si.sale_id = s.id
         WHERE s.created_at >= ${start} AND s.created_at < ${end}
         GROUP BY s.store_id
@@ -664,8 +683,8 @@ export function refreshDailyStats(tenantId: string, params: RangeParams) {
       FROM (
         SELECT s.store_id, (s.created_at AT TIME ZONE ${TZ})::date AS day,
                COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'COMPLETED') AS sales_count,
-               COALESCE(SUM(si.line_total) FILTER (WHERE s.status = 'COMPLETED'), 0) AS sales_total,
-               COALESCE(ROUND(SUM(si.qty * si.unit_cost_at_sale) FILTER (WHERE s.status = 'COMPLETED')), 0) AS cost_total,
+               COALESCE(ROUND(SUM(${NET_LINE}) FILTER (WHERE s.status = 'COMPLETED')), 0) AS sales_total,
+               COALESCE(ROUND(SUM(${LINE_COST}) FILTER (WHERE s.status = 'COMPLETED')), 0) AS cost_total,
                COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'VOIDED') AS voided_count
         FROM sales s JOIN sale_items si ON si.sale_id = s.id
         WHERE ${storeFilter(Prisma.sql`s.store_id`, params.storeIds)}
