@@ -19,6 +19,8 @@ type Tx = Prisma.TransactionClient;
 export interface MovementResult {
   movementId: string;
   balanceAfter: string; // Decimal serializado
+  /** Costo unitario aplicado al movimiento (CPP vigente) — lo congela la venta. */
+  unitCost: bigint;
 }
 
 function toDecimalString(qty: number): string {
@@ -118,7 +120,7 @@ export async function applyMovement(
     refId: input.refId,
     note: input.note,
   });
-  return { movementId, balanceAfter };
+  return { movementId, balanceAfter, unitCost: row.avg_cost };
 }
 
 /**
@@ -182,5 +184,5 @@ export async function applyCostedEntry(
     refId: input.refId,
     note: input.note,
   });
-  return { movementId, balanceAfter };
+  return { movementId, balanceAfter, unitCost: input.unitCost };
 }

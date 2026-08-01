@@ -2,7 +2,7 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fases 0 y 1 COMPLETADAS** — ver §9. Próxima: Fase 2 (POS y caja).
+> **Estado:** **Fases 0, 1 y 2 COMPLETADAS** — ver §9. Próxima: Fase 3 (compras, proveedores y gastos).
 > **Última actualización:** 2026-07-31.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
@@ -409,7 +409,11 @@ expense_categories 1─N expenses
 - **Dependencias:** F0. **Riesgos:** modelar mal producto-vs-tienda — ya resuelto en diseño (§5.2).
 - **Criterios:** kardex refleja todo movimiento con `balance_after` correcto; job de consistencia en verde; import CSV de 1,000 productos < 30 s.
 
-**Fase 2 — POS y caja (corazón del producto)**
+**Fase 2 — POS y caja (corazón del producto) — ✅ COMPLETADA 2026-07-31**
+
+> **Qué se implementó y evidencia:** migración `sales_cash` (cash_registers, cash_sessions, cash_movements, counters, sales, sale_items, sale_payments) con RLS, índice único parcial "una sesión OPEN por caja", ledger de caja append-only, items/pagos inmutables y **trigger `sales_guard`**: en `sales` solo existe la transición COMPLETED→VOIDED tocando únicamente columnas de anulación — verificado a nivel BD. **Venta transaccional** (`sales.service.ts`): correlativo atómico por tienda (`INSERT … ON CONFLICT … RETURNING`), precios del servidor (override por tienda), stock vía `applyMovement` con **CPP congelado** en `unit_cost_at_sale`, pagos que deben cuadrar exactamente (mixtos soportados, cambio calculado), efectivo a caja como SALE_IN, IVA informativo por régimen (12/112 ó 5/105), **idempotencia por `client_op_id`** (reintento devuelve la venta existente, probado también en carrera de doble submit). Las ventas toman FOR SHARE sobre la sesión y el cierre FOR UPDATE → **el arqueo nunca pierde movimientos en vuelo**. **Anulación** compensatoria: repone kardex (SALE_VOID), devuelve efectivo (SALE_VOID_OUT en la sesión abierta — original o actual), exige permiso o **PIN de supervisor** (`pin.service.ts`, registra `authorizedBy`). **Caja**: apertura/cierre con arqueo (`expected = Σ movimientos`, `difference = contado − esperado`), retiros con motivo + PIN + validación de efectivo disponible, depósitos. UI: pantalla **POS** (input de escaneo compatible con lector HID, carrito, pago con cambio, comprobante), página **Caja** (turno, movimientos, retiros/depósitos, cierre con arqueo, ventas del turno con anulación y reimpresión) y **comprobante 58/80 mm** vía CSS `@media print`. **39/39 tests** — incluye 10 ventas paralelas con correlativos únicos, arqueo al centavo (esperado 0 tras anulación; faltante de Q5.00 detectado exacto) e inmutabilidad de los tres ledgers. Verificado E2E en navegador: abrir caja Q200 → escanear por código de barras → vender Q14.50 con cambio Q35.50 → comprobante No. 15 → caja esperado Q214.50 → cierre "cuadre exacto ✔".
+> **Impacto:** Fase 3 reutiliza `insertCashMovement` (EXPENSE_OUT para gastos desde caja) y `applyCostedEntry` (compras → CPP); Fase 4 lee todo de ledgers ya consistentes.
+
 - **Objetivo:** vender de verdad en mostrador.
 - **Componentes:** pantalla POS (teclado + lector HID), apertura/cierre/arqueo de caja, venta transaccional completa (§6.1), pagos mixtos, anulación con compensaciones, retiros/gastos de caja con PIN, comprobante imprimible (vía CSS 58/80 mm), reimpresión, idempotencia `client_op_id`.
 - **Dependencias:** F1. **Riesgos:** carreras de stock y doble cobro — mitigación: decremento atómico + idempotencia + tests de concurrencia.

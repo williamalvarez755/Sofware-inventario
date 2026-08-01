@@ -97,6 +97,7 @@ async function seedDemoTenant(opts: {
   planCode: string;
 }) {
   const passwordHash = await argon2.hash(DEMO_PASSWORD);
+  const supervisorPinHash = await argon2.hash('1234'); // PIN demo de supervisores
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: opts.slug },
@@ -112,13 +113,14 @@ async function seedDemoTenant(opts: {
 
   const owner = await prisma.user.upsert({
     where: { email: opts.ownerEmail },
-    update: {},
+    update: { supervisorPinHash },
     create: {
       id: uuidv7(),
       tenantId: tenant.id,
       email: opts.ownerEmail,
       name: `Dueño ${opts.name}`,
       passwordHash,
+      supervisorPinHash,
       mustChangePassword: false,
     },
   });
@@ -171,6 +173,15 @@ async function seedDemoTenant(opts: {
       },
     });
   }
+  const existingRegister = await prisma.cashRegister.findFirst({
+    where: { storeId: store.id, name: 'Caja 1' },
+  });
+  if (!existingRegister) {
+    await prisma.cashRegister.create({
+      data: { id: uuidv7(), tenantId: tenant.id, storeId: store.id, name: 'Caja 1' },
+    });
+  }
+
   await seedDemoProducts(tenant.id, store.id, owner.id);
   return tenant;
 }

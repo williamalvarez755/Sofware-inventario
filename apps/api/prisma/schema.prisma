@@ -259,6 +259,7 @@ model Product {
   barcodes      ProductBarcode[]
   storeProducts StoreProduct[]
   movements     InventoryMovement[]
+  saleItems     SaleItem[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
@@ -338,6 +339,174 @@ model InventoryMovement {
   @@index([storeId, productId, createdAt(sort: Desc)])
   @@index([refType, refId])
   @@map("inventory_movements")
+}
+
+// ─────────────────────────── Caja (Fase 2) ───────────────────────────
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  OPENING
+  SALE_IN
+  SALE_VOID_OUT
+  WITHDRAWAL
+  EXPENSE_OUT
+  DEPOSIT_IN
+  ADJUSTMENT
+}
+
+model CashRegister {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  storeId   String   @map("store_id") @db.Uuid
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  sessions CashSession[]
+
+  @@unique([storeId, name])
+  @@map("cash_registers")
+}
+
+model CashSession {
+  id             String            @id @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  storeId        String            @map("store_id") @db.Uuid
+  cashRegisterId String            @map("cash_register_id") @db.Uuid
+  status         CashSessionStatus @default(OPEN)
+  openedBy       String            @map("opened_by") @db.Uuid
+  openedAt       DateTime          @default(now()) @map("opened_at") @db.Timestamptz()
+  openingAmount  BigInt            @map("opening_amount")
+  closedBy       String?           @map("closed_by") @db.Uuid
+  closedAt       DateTime?         @map("closed_at") @db.Timestamptz()
+  expectedAmount BigInt?           @map("expected_amount")
+  countedAmount  BigInt?           @map("counted_amount")
+  countedDetail  Json?             @map("counted_detail") // desglose por denominación
+  difference     BigInt? // counted − expected (+ sobrante / − faltante)
+  notes          String?
+
+  register  CashRegister   @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  movements CashMovement[]
+  sales     Sale[]
+
+  @@index([storeId, openedAt(sort: Desc)])
+  @@map("cash_sessions")
+}
+
+// Ledger INMUTABLE de caja (trigger anti UPDATE/DELETE en la migración).
+model CashMovement {
+  id            String           @id @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  storeId       String           @map("store_id") @db.Uuid
+  cashSessionId String           @map("cash_session_id") @db.Uuid
+  type          CashMovementType
+  amount        BigInt // con signo: + entra, − sale (centavos)
+  reason        String? // OBLIGATORIO en egresos (validado en dominio)
+  evidenceUrl   String?          @map("evidence_url")
+  refType       String?          @map("ref_type")
+  refId         String?          @map("ref_id") @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  authorizedBy  String?          @map("authorized_by") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+
+  session CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+
+  @@index([cashSessionId, createdAt])
+  @@map("cash_movements")
+}
+
+// ─────────────────────────── Ventas (Fase 2) ───────────────────────────
+
+enum SaleStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+// Correlativo transaccional por tienda y tipo de documento.
+model Counter {
+  tenantId     String @map("tenant_id") @db.Uuid
+  storeId      String @map("store_id") @db.Uuid
+  docType      String @map("doc_type")
+  currentValue BigInt @default(0) @map("current_value")
+
+  @@id([storeId, docType])
+  @@map("counters")
+}
+
+// Las ventas NUNCA se borran; la única mutación permitida es la transición a
+// VOIDED (trigger en la migración valida columnas).
+model Sale {
+  id               String     @id @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  storeId          String     @map("store_id") @db.Uuid
+  cashSessionId    String     @map("cash_session_id") @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  number           BigInt
+  status           SaleStatus @default(COMPLETED)
+  subtotal         BigInt
+  discount         BigInt     @default(0)
+  total            BigInt
+  taxBreakdown     BigInt     @default(0) @map("tax_breakdown") // IVA informativo incluido
+  clientOpId       String     @map("client_op_id") @db.Uuid // idempotencia POS
+  voidedAt         DateTime?  @map("voided_at") @db.Timestamptz()
+  voidedBy         String?    @map("voided_by") @db.Uuid
+  voidReason       String?    @map("void_reason")
+  voidAuthorizedBy String?    @map("void_authorized_by") @db.Uuid
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+
+  session  CashSession   @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  items    SaleItem[]
+  payments SalePayment[]
+
+  @@unique([storeId, number])
+  @@unique([tenantId, clientOpId])
+  @@index([storeId, createdAt(sort: Desc)])
+  @@index([cashSessionId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id             String  @id @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  saleId         String  @map("sale_id") @db.Uuid
+  productId      String  @map("product_id") @db.Uuid
+  qty            Decimal @db.Decimal(12, 3)
+  unitPrice      BigInt  @map("unit_price") // congelado al vender
+  unitCostAtSale BigInt  @default(0) @map("unit_cost_at_sale") // CPP congelado
+  discount       BigInt  @default(0)
+  lineTotal      BigInt  @map("line_total")
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([productId])
+  @@map("sale_items")
+}
+
+model SalePayment {
+  id             String        @id @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  saleId         String        @map("sale_id") @db.Uuid
+  method         PaymentMethod
+  amount         BigInt
+  amountTendered BigInt?       @map("amount_tendered") // efectivo recibido (cambio)
+  reference      String? // nº voucher / transferencia
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@map("sale_payments")
 }
 
 // ─────────────────────────── Auditoría ───────────────────────────

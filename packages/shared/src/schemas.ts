@@ -108,3 +108,65 @@ export const kardexQuerySchema = z.object({
   productId: z.string().uuid(),
   page: z.coerce.number().int().min(1).default(1),
 });
+
+// ---- Caja (Fase 2) ----
+export const openSessionSchema = z.object({
+  cashRegisterId: z.string().uuid(),
+  openingAmount: centavos,
+});
+
+export const closeSessionSchema = z.object({
+  countedAmount: centavos,
+  countedDetail: z.record(z.string(), z.number().int().min(0)).optional(), // denominación → cantidad
+  notes: z.string().trim().max(300).optional(),
+});
+
+/** Retiros y depósitos. El PIN de un autorizador solo es necesario cuando quien
+ *  registra no tiene el permiso de autorizar por sí mismo (trabajador). */
+export const cashTxSchema = z.object({
+  amount: z.number().int().positive('Monto en centavos, mayor que cero').max(999_999_999),
+  reason: z.string().trim().min(3, 'El motivo es obligatorio').max(300),
+  authorizerEmail: z.string().email().toLowerCase().trim().optional(),
+  authorizerPin: z.string().trim().min(4).max(12).optional(),
+});
+export type CashTxInput = z.infer<typeof cashTxSchema>;
+
+export const registerCreateSchema = z.object({
+  storeId: z.string().uuid(),
+  name: z.string().trim().min(2).max(40),
+});
+
+// ---- Ventas (Fase 2) ----
+export const PAYMENT_METHODS = ['CASH', 'CARD', 'TRANSFER'] as const;
+
+const salePaymentSchema = z.object({
+  method: z.enum(PAYMENT_METHODS),
+  amount: z.number().int().positive().max(999_999_999),
+  amountTendered: centavos.optional(), // solo CASH: efectivo recibido
+  reference: z.string().trim().max(60).optional(),
+});
+
+export const saleCreateSchema = z.object({
+  storeId: z.string().uuid(),
+  cashSessionId: z.string().uuid(),
+  clientOpId: z.string().uuid(), // idempotencia: reintentos no duplican
+  items: z
+    .array(z.object({ productId: z.string().uuid(), qty: stockQty }))
+    .min(1, 'La venta necesita al menos un producto'),
+  discount: centavos.default(0),
+  payments: z.array(salePaymentSchema).min(1, 'Falta la forma de pago'),
+});
+export type SaleCreateInput = z.infer<typeof saleCreateSchema>;
+
+export const voidSaleSchema = z.object({
+  reason: z.string().trim().min(3, 'El motivo es obligatorio').max(300),
+  authorizerEmail: z.string().email().toLowerCase().trim().optional(),
+  authorizerPin: z.string().trim().min(4).max(12).optional(),
+});
+export type VoidSaleInput = z.infer<typeof voidSaleSchema>;
+
+export const salesListQuerySchema = z.object({
+  storeId: z.string().uuid(),
+  sessionId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+});

@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ProductsPage } from './pages/ProductsPage';
+import { PosPage } from './pages/PosPage';
+import { CashPage } from './pages/CashPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { me, loading } = useAuth();
@@ -35,6 +37,22 @@ export function App() {
             element={
               <Protected>
                 <ProductsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/pos"
+            element={
+              <Protected>
+                <PosPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/caja"
+            element={
+              <Protected>
+                <CashPage />
               </Protected>
             }
           />

@@ -1,1 +1,25 @@
 @import 'tailwindcss';
+
+/* Impresión térmica 58/80 mm (D-009, vía CSS): al imprimir solo se ve el
+   comprobante, alineado al borde superior izquierdo del papel. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible;
+  }
+  .receipt-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 72mm;
+    margin: 0;
+    padding: 2mm;
+  }
+}
+
+@page {
+  margin: 0;
+}
