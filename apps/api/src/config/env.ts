@@ -10,6 +10,9 @@ const schema = z.object({
   PORT: z.coerce.number().int().default(4000),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /** Multiplicador de los límites de autenticación. 1 en producción; la suite
+   *  de pruebas lo eleva para no chocar con defensas pensadas para humanos. */
+  RATE_LIMIT_MULTIPLIER: z.coerce.number().int().min(1).max(1000).default(1),
 });
 
 export const env = schema.parse(process.env);

@@ -27,9 +27,15 @@ export async function verifyAuthorizer(
       'Esta operación requiere la autorización de un supervisor (correo + PIN)',
     );
   }
+  // Select explícito: el rol de runtime NO tiene permiso sobre users.totp_secret
+  // (ver migración two_factor_auth), así que un findFirst sin select fallaría.
   const authorizer = await tx.user.findFirst({
     where: { email: input.email, isActive: true },
-    include: { memberships: { where: { isActive: true } } },
+    select: {
+      id: true,
+      supervisorPinHash: true,
+      memberships: { where: { isActive: true }, select: { storeId: true, role: true } },
+    },
   });
   if (!authorizer?.supervisorPinHash) throw fail();
   if (!(await argon2.verify(authorizer.supervisorPinHash, input.pin))) throw fail();

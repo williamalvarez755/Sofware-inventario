@@ -63,7 +63,9 @@ async function storeProductOf(productId: string) {
 
 beforeAll(async () => {
   tenantA = await prismaAdmin.tenant.findUniqueOrThrow({ where: { slug: 'tienda-uno' } });
-  storeA = await prismaAdmin.store.findFirstOrThrow({ where: { tenantId: tenantA.id } });
+  storeA = await prismaAdmin.store.findFirstOrThrow({
+    where: { tenantId: tenantA.id, name: 'Central' },
+  });
   ownerA = await prismaAdmin.user.findUniqueOrThrow({ where: { email: 'owner1@demo.local' } });
   supplierA = await prismaAdmin.supplier.findFirstOrThrow({ where: { tenantId: tenantA.id } });
   registerA = await prismaAdmin.cashRegister.findFirstOrThrow({ where: { storeId: storeA.id } });

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatQ, toCentavos } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
+import { CameraScanner } from '../components/CameraScanner';
 import { Nav } from '../components/Nav';
 import { Receipt, type ReceiptData } from '../components/Receipt';
+import { retryOnNetworkFailure, useOnlineStatus } from '../lib/connection';
+import { isThermalPrintingAvailable, printThermalReceipt } from '../lib/escpos';
 
 interface StoreOpt { id: string; name: string }
 interface RegisterOpt { id: string; name: string }
@@ -35,7 +38,9 @@ export function PosPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
+  const online = useOnlineStatus();
 
   useEffect(() => {
     api<StoreOpt[]>('/api/stores').then((s) => {
@@ -80,6 +85,27 @@ export function PosPage() {
     setQuery('');
     setError(null);
   }
+
+  /** Busca un término (código escaneado o texto) y decide qué agregar. */
+  const lookup = useCallback(
+    async (term: string) => {
+      const data = await api<{ rows: ProductHit[] }>(
+        `/api/products?storeId=${storeId}&search=${encodeURIComponent(term)}`,
+      );
+      const exact = data.rows.find((p) => p.barcodes.some((b) => b.barcode === term));
+      if (exact) return addToCart(exact);
+      if (data.rows.length === 1) return addToCart(data.rows[0]!);
+      if (data.rows.length === 0) {
+        setError(`Sin resultados para "${term}"`);
+        setQuery('');
+        return;
+      }
+      setHits(data.rows);
+    },
+    // addToCart es estable en la práctica (solo usa setState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [storeId],
+  );
 
   /** Enter en el input de escaneo: lector HID (ráfaga + Enter) o búsqueda manual. */
   async function onScanSubmit(e: React.FormEvent) {
@@ -169,7 +195,7 @@ export function PosPage() {
         {session && (
           <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
             <section>
-              <form onSubmit={onScanSubmit}>
+              <form onSubmit={onScanSubmit} className="flex gap-2">
                 <input
                   ref={scanRef}
                   value={query}
@@ -177,6 +203,14 @@ export function PosPage() {
                   placeholder="Escanee un código o escriba el nombre y presione Enter…"
                   className={inputCls + ' py-3 text-base'}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowCamera(true)}
+                  title="Escanear con la cámara"
+                  className="shrink-0 rounded-lg border border-slate-300 px-4 text-xl hover:bg-slate-50"
+                >
+                  📷
+                </button>
               </form>
               {error && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p>}
               {hits && (
@@ -234,6 +268,11 @@ export function PosPage() {
             </section>
 
             <aside className="h-fit rounded-xl bg-white p-4 shadow-sm">
+              {!online && (
+                <p className="mb-2 rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-900">
+                  Sin conexión — al cobrar se reintentará automáticamente
+                </p>
+              )}
               <p className="text-xs uppercase tracking-wide text-slate-400">
                 Caja abierta · {session.salesCount} venta(s) · efectivo {formatQ(BigInt(session.expectedSoFar))}
               </p>
@@ -273,6 +312,15 @@ export function PosPage() {
           }}
         />
       )}
+      {showCamera && (
+        <CameraScanner
+          onDetected={(code) => {
+            setShowCamera(false);
+            lookup(code).catch(() => setError('Error al buscar el producto'));
+          }}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
       {receipt && <ReceiptOverlay data={receipt} onClose={() => setReceipt(null)} />}
     </div>
   );
@@ -295,6 +343,7 @@ function PayModal({
   const [reference, setReference] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(0);
 
   const tenderedCents = tendered ? BigInt(toCentavos(tendered)) : 0n;
   const change = method === 'CASH' && tenderedCents > total ? tenderedCents - total : 0n;
@@ -312,21 +361,29 @@ function PayModal({
               ...(tendered ? { amountTendered: Number(tenderedCents) } : {}),
             }
           : { method, amount: Number(total), ...(reference ? { reference } : {}) };
-      const res = await api<{ receipt: ReceiptData }>('/api/sales', {
-        method: 'POST',
-        body: JSON.stringify({
-          storeId,
-          cashSessionId: sessionId,
-          clientOpId: clientOpId.current,
-          items: cart.map((l) => ({ productId: l.product.id, qty: l.qty })),
-          discount: 0,
-          payments: [payment],
-        }),
+      const body = JSON.stringify({
+        storeId,
+        cashSessionId: sessionId,
+        clientOpId: clientOpId.current, // mismo id en todos los reintentos
+        items: cart.map((l) => ({ productId: l.product.id, qty: l.qty })),
+        discount: 0,
+        payments: [payment],
       });
+      // Ante un corte de red se reintenta con el MISMO client_op_id: el
+      // servidor devuelve la venta ya creada en vez de duplicarla.
+      const res = await retryOnNetworkFailure(
+        () => api<{ receipt: ReceiptData }>('/api/sales', { method: 'POST', body }),
+        { onRetry: (attempt) => setRetrying(attempt) },
+      );
       onDone(res.receipt);
     } catch (e2) {
-      setError(e2 instanceof ApiError ? e2.message : 'Error al cobrar');
+      setError(
+        e2 instanceof ApiError
+          ? e2.message
+          : 'No se pudo conectar. Verifique la red e intente de nuevo — la venta no se duplicará.',
+      );
       setBusy(false);
+      setRetrying(0);
     }
   }
 
@@ -372,6 +429,11 @@ function PayModal({
             <input value={reference} onChange={(e) => setReference(e.target.value)} className={inputCls + ' mt-1'} />
           </label>
         )}
+        {retrying > 0 && busy && (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Sin respuesta de la red — reintentando ({retrying})… la venta no se duplicará.
+          </p>
+        )}
         {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <button
           disabled={busy || (method === 'CASH' && tendered !== '' && tenderedCents < total)}
@@ -385,16 +447,36 @@ function PayModal({
 }
 
 export function ReceiptOverlay({ data, onClose }: { data: ReceiptData; onClose: () => void }) {
+  const [printError, setPrintError] = useState<string | null>(null);
+  const thermal = isThermalPrintingAvailable();
+
+  /** Con agente local: corte automático y gaveta. Sin él: diálogo del navegador. */
+  async function print() {
+    setPrintError(null);
+    if (!thermal) return window.print();
+    try {
+      const printed = await printThermalReceipt(data, { openDrawer: true });
+      if (!printed) window.print();
+    } catch {
+      setPrintError('No se pudo imprimir en la térmica; use la impresión del navegador.');
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] overflow-y-auto rounded-2xl bg-slate-50 p-4 shadow-xl">
         <Receipt data={data} />
+        {printError && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 print:hidden">
+            {printError}
+          </p>
+        )}
         <div className="mt-3 flex gap-2 print:hidden">
           <button
-            onClick={() => window.print()}
+            onClick={print}
             className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
           >
-            Imprimir
+            {thermal ? 'Imprimir (térmica)' : 'Imprimir'}
           </button>
           <button
             onClick={onClose}

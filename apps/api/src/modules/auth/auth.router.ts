@@ -1,10 +1,15 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
-import { loginSchema, refreshSchema } from '@minimarket/shared';
+import { loginSchema, refreshSchema, twoFactorLoginSchema } from '@minimarket/shared';
 import { requireAuth } from '../../middleware/auth.js';
+import {
+  authIpLimiter,
+  passwordAttemptLimiter,
+  twoFactorLimiter,
+} from '../../middleware/rate-limit.js';
 import { validate } from '../../middleware/validate.js';
 import { unauthorized } from '../../lib/errors.js';
 import {
+  completeTwoFactorLogin,
   loginTenantUser,
   revokeSession,
   rotateRefreshToken,
@@ -13,17 +18,26 @@ import {
 export const authRouter = Router();
 
 // Rate limit en memoria: suficiente con una instancia (D-020).
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  message: { error: { code: 'RATE_LIMITED', message: 'Demasiados intentos. Espere unos minutos.' } },
-});
+// Cubos separados por cuenta y por conexión — ver middleware/rate-limit.ts.
+authRouter.post(
+  '/login',
+  authIpLimiter,
+  passwordAttemptLimiter,
+  validate(loginSchema),
+  async (req, res) => {
+    res.json(await loginTenantUser(req.body.email, req.body.password, req));
+  },
+);
 
-authRouter.post('/login', loginLimiter, validate(loginSchema), async (req, res) => {
-  res.json(await loginTenantUser(req.body.email, req.body.password, req));
-});
+/** Segundo paso del login cuando el usuario tiene 2FA activo. */
+authRouter.post(
+  '/2fa/login',
+  twoFactorLimiter,
+  validate(twoFactorLoginSchema),
+  async (req, res) => {
+    res.json(await completeTwoFactorLogin(req.body.challengeToken, req.body.code, req));
+  },
+);
 
 authRouter.post('/refresh', validate(refreshSchema), async (req, res) => {
   res.json(await rotateRefreshToken(req.body.refreshToken, req));

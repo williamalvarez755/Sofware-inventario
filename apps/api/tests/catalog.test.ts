@@ -24,7 +24,9 @@ beforeAll(async () => {
   ownerToken = await login('owner1@demo.local');
   owner2Token = await login('owner2@demo.local');
   const tenantA = await prismaAdmin.tenant.findUniqueOrThrow({ where: { slug: 'tienda-uno' } });
-  storeAId = (await prismaAdmin.store.findFirstOrThrow({ where: { tenantId: tenantA.id } })).id;
+  storeAId = (
+    await prismaAdmin.store.findFirstOrThrow({ where: { tenantId: tenantA.id, name: 'Central' } })
+  ).id;
   unidadId = (await prismaAdmin.unit.findFirstOrThrow({ where: { code: 'UNIDAD' } })).id;
 });
 

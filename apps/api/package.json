@@ -12,6 +12,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "check:stock": "tsx scripts/check-stock.ts",
+    "load-test": "tsx scripts/load-test.ts",
     "test": "vitest run"
   },
   "prisma": {
@@ -27,8 +28,10 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
+    "otpauth": "^9.5.1",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
+    "qrcode": "^1.5.4",
     "uuid": "^11.0.5",
     "zod": "^3.24.1"
   },
@@ -37,6 +40,7 @@
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.7",
+    "@types/qrcode": "^1.5.6",
     "@types/supertest": "^6.0.2",
     "pino-pretty": "^13.0.0",
     "prisma": "^6.2.1",

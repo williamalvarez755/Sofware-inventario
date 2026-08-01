@@ -14,9 +14,16 @@ import {
   newRefreshToken,
   refreshExpiry,
   signAccessToken,
+  signChallengeToken,
+  verifyChallengeToken,
   type PrincipalKind,
 } from '../../lib/tokens.js';
 import { audit } from '../audit/audit.service.js';
+import {
+  consumeSecondFactor,
+  countRecoveryCodes,
+  getTwoFactorRecord,
+} from './twofactor.service.js';
 
 interface TokenPair {
   accessToken: string;
@@ -76,6 +83,26 @@ export async function loginTenantUser(email: string, password: string, req: Requ
     throw forbidden('TENANT_SUSPENDED', 'El servicio está suspendido. Contacte a soporte.');
   }
 
+  // Con 2FA activo la contraseña sola no entra: se emite un token de desafío
+  // que solo sirve para completar este login.
+  const twoFactor = await getTwoFactorRecord({
+    kind: 'user',
+    id: user.id,
+    email: user.email,
+    tenantId: user.tenantId,
+  });
+  if (twoFactor.totpEnabledAt && twoFactor.totpSecret) {
+    await audit(prismaAdmin, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.login_2fa_challenge',
+    }, req);
+    return {
+      requiresTwoFactor: true as const,
+      challengeToken: signChallengeToken({ sub: user.id, kind: 'user', ten: user.tenantId }),
+    };
+  }
+
   const tokens = await issueTokens({ kind: 'user', id: user.id, tenantId: user.tenantId, req });
   await prismaAdmin.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await audit(prismaAdmin, { tenantId: user.tenantId, userId: user.id, action: 'auth.login' }, req);
@@ -92,6 +119,86 @@ export async function loginTenantUser(email: string, password: string, req: Requ
   };
 }
 
+/** Segundo paso del login: código TOTP o de recuperación. */
+export async function completeTwoFactorLogin(
+  challengeToken: string,
+  code: string,
+  req: Request,
+) {
+  const challenge = verifyChallengeToken(challengeToken);
+
+  if (challenge.kind === 'user') {
+    const user = await prismaAdmin.user.findUnique({
+      where: { id: challenge.sub },
+      include: { tenant: { select: { id: true, name: true, status: true } } },
+    });
+    if (!user?.isActive) throw unauthorized();
+    if (user.tenant.status !== 'ACTIVE') {
+      throw forbidden('TENANT_SUSPENDED', 'El servicio está suspendido. Contacte a soporte.');
+    }
+
+    const principal = {
+      kind: 'user' as const,
+      id: user.id,
+      email: user.email,
+      tenantId: user.tenantId,
+    };
+    const twoFactor = await getTwoFactorRecord(principal);
+    if (!twoFactor.totpSecret || !twoFactor.totpEnabledAt) throw unauthorized();
+    if (!(await consumeSecondFactor(principal, twoFactor.totpSecret, code))) {
+      await audit(prismaAdmin, {
+        tenantId: user.tenantId,
+        userId: user.id,
+        action: 'auth.login_2fa_failed',
+      }, req);
+      throw unauthorized('Código incorrecto');
+    }
+
+    const tokens = await issueTokens({ kind: 'user', id: user.id, tenantId: user.tenantId, req });
+    await prismaAdmin.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await audit(prismaAdmin, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.login',
+      after: { twoFactor: true },
+    }, req);
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mustChangePassword: user.mustChangePassword,
+      },
+      tenant: { id: user.tenant.id, name: user.tenant.name },
+      recoveryCodesLeft: await countRecoveryCodes(principal),
+    };
+  }
+
+  const admin = await prismaAdmin.platformUser.findUnique({ where: { id: challenge.sub } });
+  if (!admin?.isActive || !admin.totpSecret || !admin.totpEnabledAt) throw unauthorized();
+  const principal = { kind: 'platform' as const, id: admin.id, email: admin.email };
+  if (!(await consumeSecondFactor(principal, admin.totpSecret, code))) {
+    await audit(prismaAdmin, {
+      platformUserId: admin.id,
+      action: 'platform.login_2fa_failed',
+    }, req);
+    throw unauthorized('Código incorrecto');
+  }
+  const tokens = await issueTokens({ kind: 'platform', id: admin.id, req });
+  await audit(prismaAdmin, {
+    platformUserId: admin.id,
+    action: 'platform.login',
+    after: { twoFactor: true },
+  }, req);
+  return {
+    ...tokens,
+    admin: { id: admin.id, name: admin.name, email: admin.email },
+    recoveryCodesLeft: await countRecoveryCodes(principal),
+  };
+}
+
 export async function loginPlatformUser(email: string, password: string, req: Request) {
   const admin = await prismaAdmin.platformUser.findUnique({ where: { email } });
   const passwordOk = admin && (await argon2.verify(admin.passwordHash, password));
@@ -103,6 +210,17 @@ export async function loginPlatformUser(email: string, password: string, req: Re
     }, req);
     throw unauthorized();
   }
+  if (admin.totpEnabledAt && admin.totpSecret) {
+    await audit(prismaAdmin, {
+      platformUserId: admin.id,
+      action: 'platform.login_2fa_challenge',
+    }, req);
+    return {
+      requiresTwoFactor: true as const,
+      challengeToken: signChallengeToken({ sub: admin.id, kind: 'platform' }),
+    };
+  }
+
   const tokens = await issueTokens({ kind: 'platform', id: admin.id, req });
   await audit(prismaAdmin, { platformUserId: admin.id, action: 'platform.login' }, req);
   return { ...tokens, admin: { id: admin.id, name: admin.name, email: admin.email } };

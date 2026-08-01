@@ -13,6 +13,7 @@ import { logger } from './lib/logger.js';
 };
 
 import { authRouter } from './modules/auth/auth.router.js';
+import { twoFactorRouter } from './modules/auth/twofactor.router.js';
 import { categoriesRouter } from './modules/catalog/categories.router.js';
 import { productsRouter } from './modules/catalog/products.router.js';
 import { unitsRouter } from './modules/catalog/units.router.js';
@@ -32,8 +33,26 @@ export function createApp() {
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Render corre detrás de proxy
 
-  app.use(helmet());
-  app.use(cors({ origin: env.CORS_ORIGIN.split(',') }));
+  app.use(
+    helmet({
+      // El API solo devuelve JSON: nada de scripts, estilos ni marcos.
+      // Si alguna respuesta llegara a interpretarse como HTML, esta política
+      // impide que ejecute nada.
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'none'"],
+          formAction: ["'none'"],
+        },
+      },
+      // HSTS: un año, incluidos subdominios. Render ya sirve por HTTPS.
+      hsts: { maxAge: 31_536_000, includeSubDomains: true, preload: true },
+      referrerPolicy: { policy: 'no-referrer' },
+      crossOriginResourcePolicy: { policy: 'same-site' },
+    }),
+  );
+  app.use(cors({ origin: env.CORS_ORIGIN.split(','), credentials: false }));
   app.use(express.json({ limit: '1mb' }));
   app.use(
     pinoHttp({
@@ -51,6 +70,7 @@ export function createApp() {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api/auth/2fa', twoFactorRouter);
   app.use('/api/stores', storesRouter);
   app.use('/api/products', productsRouter);
   app.use('/api/categories', categoriesRouter);

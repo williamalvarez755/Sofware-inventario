@@ -93,14 +93,15 @@ model Subscription {
 }
 
 model PlatformUser {
-  id           String   @id @db.Uuid
-  email        String   @unique
-  name         String
-  passwordHash String   @map("password_hash")
-  totpSecret   String?  @map("totp_secret")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  id            String    @id @db.Uuid
+  email         String    @unique
+  name          String
+  passwordHash  String    @map("password_hash")
+  totpSecret    String?   @map("totp_secret")
+  totpEnabledAt DateTime? @map("totp_enabled_at") @db.Timestamptz()
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
   @@map("platform_users")
 }
@@ -127,11 +128,57 @@ model User {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  memberships StoreMember[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  memberships   StoreMember[]
+  recoveryCodes RecoveryCode[]
+  totp          UserTotp?
 
   @@index([tenantId])
   @@map("users")
+}
+
+/**
+ * Segundo factor del usuario, en tabla APARTE de `users` (D-033).
+ * Motivo: el rol de runtime necesita leer `users` constantemente (nombres,
+ * membresías, PIN de supervisor), así que restringir por columna convertía
+ * cada consulta sin `select` explícito en una bomba de tiempo. Con el secreto
+ * en su propia tabla, al runtime simplemente se le niega el acceso completo y
+ * `users` vuelve a ser una tabla normal.
+ *
+ * `enabledAt` con valor = el usuario ya probó un código válido; hasta entonces
+ * el secreto existe pero 2FA no está activo.
+ */
+model UserTotp {
+  userId    String    @id @map("user_id") @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  secret    String
+  enabledAt DateTime? @map("enabled_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_totp")
+}
+
+/**
+ * Códigos de recuperación de 2FA (un solo uso, hasheados).
+ * Sin esto, un tendero que pierde el teléfono pierde el acceso a su negocio.
+ */
+model RecoveryCode {
+  id             String    @id @db.Uuid
+  tenantId       String?   @map("tenant_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  platformUserId String?   @map("platform_user_id") @db.Uuid
+  codeHash       String    @map("code_hash")
+  usedAt         DateTime? @map("used_at") @db.Timestamptz()
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platformUserId])
+  @@map("recovery_codes")
 }
 
 model Store {

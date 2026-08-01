@@ -57,7 +57,9 @@ async function newTestProduct(stock: number, cost: bigint): Promise<string> {
 
 beforeAll(async () => {
   tenantA = await prismaAdmin.tenant.findUniqueOrThrow({ where: { slug: 'tienda-uno' } });
-  storeA = await prismaAdmin.store.findFirstOrThrow({ where: { tenantId: tenantA.id } });
+  storeA = await prismaAdmin.store.findFirstOrThrow({
+    where: { tenantId: tenantA.id, name: 'Central' },
+  });
   ownerA = await prismaAdmin.user.findUniqueOrThrow({ where: { email: 'owner1@demo.local' } });
   unidadId = (await prismaAdmin.unit.findFirstOrThrow({ where: { code: 'UNIDAD' } })).id;
   ownerToken = await login('owner1@demo.local');

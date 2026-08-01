@@ -101,7 +101,11 @@ function cashSale(sessionId: string, productId: string, qty: number, opts?: {
 
 beforeAll(async () => {
   tenantA = await prismaAdmin.tenant.findUniqueOrThrow({ where: { slug: 'tienda-uno' } });
-  storeA = await prismaAdmin.store.findFirstOrThrow({ where: { tenantId: tenantA.id } });
+  // Por nombre, no "la primera": otras suites y el script de carga crean
+  // tiendas en este mismo tenant, y el trabajador solo es miembro de Central.
+  storeA = await prismaAdmin.store.findFirstOrThrow({
+    where: { tenantId: tenantA.id, name: 'Central' },
+  });
   registerA = await prismaAdmin.cashRegister.findFirstOrThrow({
     where: { storeId: storeA.id },
   });

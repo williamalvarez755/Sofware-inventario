@@ -11,6 +11,27 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(20),
 });
 
+// ---- 2FA (Fase 6) ----
+/** Acepta 6 dígitos (TOTP) o un código de recuperación con guion. */
+const secondFactorCode = z
+  .string()
+  .trim()
+  .min(6, 'Código incompleto')
+  .max(12)
+  .transform((v) => v.replace(/\s/g, ''));
+
+export const twoFactorLoginSchema = z.object({
+  challengeToken: z.string().min(20),
+  code: secondFactorCode,
+});
+
+export const twoFactorEnableSchema = z.object({ code: secondFactorCode });
+
+export const twoFactorDisableSchema = z.object({
+  password: z.string().min(1, 'Contraseña requerida'),
+  code: secondFactorCode,
+});
+
 // ---- Tiendas ----
 export const storeCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nombre muy corto').max(80),

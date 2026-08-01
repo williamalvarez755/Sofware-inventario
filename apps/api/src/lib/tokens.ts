@@ -22,11 +22,46 @@ export function signAccessToken(payload: AccessPayload, ttlMinutes?: number): st
 }
 
 export function verifyAccessToken(token: string): AccessPayload {
+  let payload: AccessPayload & { chal?: boolean };
   try {
-    return jwt.verify(token, env.JWT_SECRET, { issuer: 'minimarket-api' }) as AccessPayload;
+    payload = jwt.verify(token, env.JWT_SECRET, { issuer: 'minimarket-api' }) as AccessPayload & {
+      chal?: boolean;
+    };
   } catch {
     throw unauthorized('Sesión inválida o expirada');
   }
+  // Un token de desafío 2FA jamás vale como token de acceso.
+  if (payload.chal) throw unauthorized();
+  return payload;
+}
+
+/**
+ * Token de desafío del segundo factor: vida muy corta (5 min) y sin poder
+ * alguno salvo el de completar ese login concreto.
+ */
+export interface ChallengePayload {
+  sub: string;
+  kind: PrincipalKind;
+  ten?: string;
+  chal: true;
+}
+
+export function signChallengeToken(payload: Omit<ChallengePayload, 'chal'>): string {
+  return jwt.sign({ ...payload, chal: true }, env.JWT_SECRET, {
+    expiresIn: '5m',
+    issuer: 'minimarket-api',
+  });
+}
+
+export function verifyChallengeToken(token: string): ChallengePayload {
+  let payload: ChallengePayload;
+  try {
+    payload = jwt.verify(token, env.JWT_SECRET, { issuer: 'minimarket-api' }) as ChallengePayload;
+  } catch {
+    throw unauthorized('La verificación expiró. Ingrese de nuevo.');
+  }
+  if (!payload.chal) throw unauthorized();
+  return payload;
 }
 
 /** Refresh token: opaco (no JWT). Solo su hash SHA-256 se guarda en BD. */

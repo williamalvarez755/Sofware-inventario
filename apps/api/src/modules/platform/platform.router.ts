@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import {
   impersonateSchema,
   loginSchema,
@@ -7,10 +6,17 @@ import {
   subscriptionSchema,
   tenantOnboardSchema,
   tenantStatusSchema,
+  twoFactorLoginSchema,
 } from '@minimarket/shared';
 import { requirePlatformAuth } from '../../middleware/auth.js';
+import {
+  authIpLimiter,
+  passwordAttemptLimiter,
+  twoFactorLimiter,
+} from '../../middleware/rate-limit.js';
 import { validate } from '../../middleware/validate.js';
-import { loginPlatformUser } from '../auth/auth.service.js';
+import { completeTwoFactorLogin, loginPlatformUser } from '../auth/auth.service.js';
+import { platformTwoFactorRouter } from '../auth/twofactor.router.js';
 import { onboardTenant } from './onboarding.service.js';
 import {
   createPlan,
@@ -27,17 +33,26 @@ import {
 
 export const platformRouter = Router();
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  message: { error: { code: 'RATE_LIMITED', message: 'Demasiados intentos.' } },
-});
+platformRouter.post(
+  '/auth/login',
+  authIpLimiter,
+  passwordAttemptLimiter,
+  validate(loginSchema),
+  async (req, res) => {
+    res.json(await loginPlatformUser(req.body.email, req.body.password, req));
+  },
+);
 
-platformRouter.post('/auth/login', loginLimiter, validate(loginSchema), async (req, res) => {
-  res.json(await loginPlatformUser(req.body.email, req.body.password, req));
-});
+platformRouter.post(
+  '/auth/2fa/login',
+  twoFactorLimiter,
+  validate(twoFactorLoginSchema),
+  async (req, res) => {
+    res.json(await completeTwoFactorLogin(req.body.challengeToken, req.body.code, req));
+  },
+);
+
+platformRouter.use('/2fa', platformTwoFactorRouter);
 
 // Todo lo que sigue exige sesión de super admin.
 platformRouter.use(requirePlatformAuth);

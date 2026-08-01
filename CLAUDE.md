@@ -2,7 +2,7 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fases 0 a 5 COMPLETADAS** — ver §9. Próxima: Fase 6 (hardening y experiencia de tienda).
+> **Estado:** **Fases 0 a 6 COMPLETADAS** — el producto está listo para operar en tienda real. Ver §9 y el backlog de mejoras en §10.
 > **Última actualización:** 2026-08-01.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
@@ -449,7 +449,25 @@ expense_categories 1─N expenses
 - **Dependencias:** F0 (el modelo ya existe; esto es la UI/operativa). **Riesgos:** impersonación mal auditada — cada acción impersonada se marca en `audit_logs`.
 - **Criterios:** suspender un tenant lo bloquea en < 1 min sin afectar a otros; onboarding de tenant nuevo < 5 min.
 
-**Fase 6 — Hardening y experiencia de tienda**
+**Fase 6 — Hardening y experiencia de tienda — ✅ COMPLETADA 2026-08-01** (con un criterio abierto, ver abajo)
+
+> **Qué se implementó y evidencia:**
+> **2FA TOTP** para dueños y super admins: QR generado en el servidor (jamás se manda el secreto a un servicio externo), activación que exige probar un código real, **8 códigos de recuperación de un solo uso** hasheados con Argon2id (un tendero que pierde el teléfono no puede perder su negocio), login en dos pasos con token de desafío de 5 min que no sirve como token de acceso, tolerancia de ±30 s a relojes desfasados, y desactivación que exige contraseña **y** segundo factor. El secreto vive en `user_totp`, tabla negada por completo al rol de runtime (D-033).
+> **Escáner por cámara**: `BarcodeDetector` nativo con carga diferida de ZXing como respaldo (chunk aparte: quien use lector físico no paga su peso), cámara trasera por defecto, manejo de permiso denegado y apagado garantizado de la cámara al cerrar.
+> **Impresión ESC/POS** vía QZ Tray con corte parcial y apertura de gaveta, caída limpia a impresión por navegador si el agente no está. 7 pruebas sobre los bytes exactos.
+> **PWA** instalable con service worker; **el API nunca se cachea** (D-032: un POS que muestra stock viejo es peor que uno que avisa "sin conexión"), indicador de conexión y **reintento automático ante cortes de red conservando el `client_op_id`** — el criterio "reintenta y no duplica ventas" queda probado.
+> **Ensayo real de respaldo y restauración** ([docs/respaldos.md](docs/respaldos.md)): se respaldó y restauró la base completa; conteos y totales idénticos, y —lo que suele olvidarse— **las 28 tablas con RLS, 56 políticas, 9 triggers y los permisos del rol de runtime viajaron intactos**, con prueba funcional de aislamiento sobre la base restaurada.
+> **Prueba de carga real** ([scripts/load-test.ts](apps/api/scripts/load-test.ts)): **131.9 ventas/s** con 20 cajas simultáneas y 0 fallos; en el escenario realista de una tienda (3 cajas) la latencia mediana es de **21 ms**. Cada corrida verifica además que el dinero cuadre: correlativos únicos, efectivo = ventas, stock exacto y kardex sin discrepancias. Contexto: el volumen proyectado (1,000 tiendas × 500 ventas/día) son ~6 ventas/s — hay ~20× de margen en una sola instancia.
+> **Revisión de seguridad** ([docs/seguridad.md](docs/seguridad.md)) con 17 pruebas automatizadas y **5 hallazgos corregidos**, detallados abajo.
+> **118 tests en el API + 11 en la web**, todos en verde.
+>
+> **Hallazgos corregidos durante el hardening** (el valor real de esta fase):
+> 1. El límite de intentos de login era **por IP y compartido con el 2FA**: en una tienda todos los cajeros salen por una sola conexión, así que tres compañeros equivocándose en el cambio de turno dejaban al cuarto **sin poder entrar con clientes esperando**. Ahora hay cubos separados por cuenta, por conexión y por desafío (D-034).
+> 2. JSON malformado → **500** en vez de 400. 3. Cuerpo demasiado grande → **500** en vez de 413. 4. Identificador inválido en la URL → **500** en cualquier endpoint (un escáner automático llenaba el monitoreo de "errores internos" falsos). Los tres corregidos con mapeo explícito de errores.
+> 5. Restringir `users.totp_secret` por columna **rompía la autorización por PIN de supervisor** — el secreto se movió a su propia tabla (D-033).
+>
+> **Criterio abierto, con honestidad:** "corte automático verificado en al menos 2 marcas reales de impresora" **no se cumplió** — requiere hardware físico. Lo verificado son los comandos generados; la matriz de impresoras está lista para llenarse en [docs/impresion.md](docs/impresion.md). Igualmente, `npm audit` reporta un aviso alto en react-router **sin versión corregida publicada**, cuya ruta vulnerable (modo RSC) no es alcanzable en esta SPA — aceptado y documentado con fecha de revisión.
+
 - **Objetivo:** calidad de producto comercial.
 - **Componentes:** escáner por cámara (BarcodeDetector/ZXing), ESC/POS vía QZ Tray (corte, gaveta), PWA pulida (instalable, tolerancia a micro-cortes), 2FA TOTP, ensayo de restore de backups, pruebas de carga, revisión de seguridad (checklist OWASP ASVS nivel 1–2).
 - **Dependencias:** F2–F5. **Criterios:** impresión con corte automático en al menos 2 marcas de impresora reales; PWA reintenta y no duplica ventas ante corte de red simulado.
@@ -515,6 +533,10 @@ expense_categories 1─N expenses
 | D-029 | 2026-08-01 | La contraseña temporal del onboarding se genera legible (sin `l/1/O/0`), se devuelve **una sola vez** y fuerza cambio al primer ingreso | El super admin se la dicta al cliente por teléfono o WhatsApp; no se guarda en claro en ningún lado. |
 | D-030 | 2026-08-01 | Registrar un pago con estado ACTIVE **reactiva** al tenant suspendido por mora, sin paso manual aparte | El flujo real de cobranza es "me pagaron → vuelve a operar"; obligar a dos acciones invita a dejar clientes suspendidos por olvido. |
 | D-031 | 2026-08-01 | Las sesiones de plataforma y de tienda usan claves de almacenamiento distintas (`mm.platformRefresh` vs `mm.refreshToken`), y el token de soporte vive en `sessionStorage` | Permite que el super admin tenga ambas sesiones abiertas sin pisarse — que es justo lo que ocurre al usar "ver como" — y que la sesión de soporte muera al cerrar la pestaña. |
+| D-032 | 2026-08-01 | La PWA cachea **solo el armazón** (JS/CSS/HTML). Las respuestas del API **nunca** se cachean | Un POS que muestra stock o precios viejos es peor que uno que avisa "sin conexión": el cajero cobraría mal sin saberlo. El modo offline real (cola local + sincronización) sigue siendo mejora futura #1, y es un proyecto en sí mismo. |
+| D-033 | 2026-08-01 | El secreto de 2FA vive en la tabla `user_totp`, no en una columna de `users`. Se revierte el intento de restringir por columna | Restringir columnas de `users` rompía toda consulta sin `select` explícito — la autorización por PIN de supervisor dejó de funcionar — y dejaba una trampa para cada función futura. Con el secreto aislado, `users` es una tabla normal para el runtime y el material de 2FA queda simplemente fuera de su alcance, igual que `refresh_tokens`. |
+| D-034 | 2026-08-01 | Límites de autenticación en tres cubos: por cuenta (ip+correo, 10), por conexión (100) y por desafío 2FA (10). Configurables por entorno | Limitar solo por IP castiga a toda una tienda: los cajeros comparten conexión y el error de uno bloqueaba a los demás en pleno mostrador. La lógica de las claves se prueba por unidad; los límites se elevan en la suite para no chocar con una defensa calibrada para humanos. |
+| D-035 | 2026-08-01 | El script de prueba de carga crea su **propio tenant desechable** en lugar de reutilizar el demo | Los ledgers son inmutables por diseño (los triggers rechazan `DELETE` incluso al superusuario), así que sus datos no se pueden retirar. En el tenant demo contaminarían para siempre las tiendas y los reportes; en uno aparte, no molestan a nadie. |
 
 ---
 
