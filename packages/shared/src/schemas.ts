@@ -238,6 +238,56 @@ export const expensesListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
 });
 
+// ---- Plataforma / SaaS (Fase 5) ----
+
+/** Onboarding completo de un cliente nuevo en una sola operación. */
+export const tenantOnboardSchema = z.object({
+  name: z.string().trim().min(2, 'Nombre del negocio muy corto').max(80),
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(3, 'Identificador muy corto')
+    .max(40)
+    .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
+  planCode: z.string().trim().min(2),
+  ownerName: z.string().trim().min(2, 'Nombre del dueño requerido').max(80),
+  ownerEmail: z.string().email('Correo inválido').toLowerCase().trim(),
+  ownerPhone: z.string().trim().max(20).optional(),
+  storeName: z.string().trim().min(2, 'Nombre de la tienda requerido').max(80),
+  taxRegime: z.enum(['GENERAL', 'PEQUENO_CONTRIBUYENTE', 'NINGUNO']).default('NINGUNO'),
+  taxId: z.string().trim().max(20).optional(),
+  trialDays: z.coerce.number().int().min(0).max(365).default(30),
+});
+export type TenantOnboardInput = z.infer<typeof tenantOnboardSchema>;
+
+export const planSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(2)
+    .max(30)
+    .regex(/^[a-z0-9-]+$/, 'Solo minúsculas, números y guiones'),
+  name: z.string().trim().min(2).max(60),
+  maxStores: z.coerce.number().int().min(1).max(1000),
+  maxUsers: z.coerce.number().int().min(1).max(10_000),
+  monthlyPrice: z.coerce.number().int().min(0).max(999_999_999), // centavos
+  isActive: z.boolean().optional(),
+});
+
+export const subscriptionSchema = z.object({
+  planCode: z.string().trim().min(2),
+  months: z.coerce.number().int().min(1).max(36).default(1),
+  amount: z.coerce.number().int().min(0).max(999_999_999).optional(), // omitido = precio del plan
+  status: z.enum(['TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED']).default('ACTIVE'),
+  paymentNote: z.string().trim().max(200).optional(),
+});
+
+export const impersonateSchema = z.object({
+  reason: z.string().trim().min(5, 'Indique el motivo del acceso').max(200),
+});
+
 // ---- Reportes (Fase 4) ----
 /** Fechas en formato YYYY-MM-DD, interpretadas en horario de Guatemala. */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use el formato AAAA-MM-DD');

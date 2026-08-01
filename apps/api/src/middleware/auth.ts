@@ -38,15 +38,31 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   const payload = verifyAccessToken(bearerToken(req));
   if (payload.kind !== 'user' || !payload.ten) throw unauthorized();
 
+  // Sesión impersonada (D-028): estrictamente de lectura. El super admin ve lo
+  // que ve el cliente, pero no puede vender, anular ni tocar su dinero.
+  if (payload.imp && req.method !== 'GET') {
+    throw forbidden(
+      'IMPERSONATION_READ_ONLY',
+      'La sesión de soporte es de solo lectura: no puede modificar datos del cliente',
+    );
+  }
+
+  // Un tenant suspendido sigue siendo visible para soporte (por eso el super
+  // admin puede entrar a diagnosticar); para sus propios usuarios, no.
   const status = await getTenantStatus(payload.ten);
-  if (status !== 'ACTIVE') {
+  if (status !== 'ACTIVE' && !payload.imp) {
     throw forbidden(
       'TENANT_SUSPENDED',
       'El servicio está suspendido. Contacte al administrador de la plataforma.',
     );
   }
 
-  req.auth = { kind: 'user', userId: payload.sub, tenantId: payload.ten };
+  req.auth = {
+    kind: 'user',
+    userId: payload.sub,
+    tenantId: payload.ten,
+    ...(payload.imp ? { impersonatedBy: payload.imp } : {}),
+  };
   req.db = forTenant(payload.ten);
   next();
 }

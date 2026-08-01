@@ -4,8 +4,32 @@
  */
 const BASE_URL: string = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_KEY = 'mm.refreshToken';
+/** Token de soporte ("ver como tenant"): vive en sessionStorage porque muere
+ *  con la pestaña, es de solo lectura y nunca debe sobrevivir al cierre. */
+const IMPERSONATION_KEY = 'mm.impersonation';
 
 let accessToken: string | null = null;
+
+export interface ImpersonationInfo {
+  accessToken: string;
+  tenantName: string;
+  actingAs: string;
+}
+
+export function getImpersonation(): ImpersonationInfo | null {
+  const raw = sessionStorage.getItem(IMPERSONATION_KEY);
+  return raw ? (JSON.parse(raw) as ImpersonationInfo) : null;
+}
+
+export function startImpersonation(info: ImpersonationInfo) {
+  sessionStorage.setItem(IMPERSONATION_KEY, JSON.stringify(info));
+  accessToken = info.accessToken;
+}
+
+export function stopImpersonation() {
+  sessionStorage.removeItem(IMPERSONATION_KEY);
+  accessToken = null;
+}
 
 export function setSession(tokens: { accessToken: string; refreshToken: string }) {
   accessToken = tokens.accessToken;
@@ -58,6 +82,9 @@ function tryRefresh(): Promise<boolean> {
 }
 
 async function doRefresh(): Promise<boolean> {
+  // Una sesión de soporte no se renueva: expira a los 15 min y el super admin
+  // debe volver a pedirla, dejando otra huella en la bitácora.
+  if (getImpersonation()) return false;
   const refreshToken = localStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return false;
   const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
@@ -90,8 +117,13 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
-/** Restaura sesión al cargar la app (si hay refresh token guardado). */
+/** Restaura sesión al cargar la app: primero la de soporte, luego la propia. */
 export async function restoreSession(): Promise<boolean> {
+  const impersonation = getImpersonation();
+  if (impersonation) {
+    accessToken = impersonation.accessToken;
+    return true;
+  }
   if (!hasStoredSession()) return false;
   return tryRefresh();
 }

@@ -2,7 +2,7 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fases 0 a 4 COMPLETADAS** — ver §9. Próxima: Fase 5 (panel de plataforma SaaS).
+> **Estado:** **Fases 0 a 5 COMPLETADAS** — ver §9. Próxima: Fase 6 (hardening y experiencia de tienda).
 > **Última actualización:** 2026-08-01.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
@@ -439,7 +439,11 @@ expense_categories 1─N expenses
 - **Dependencias:** F2, F3. **Riesgos:** reportes lentos — mitigación: agregados precalculados + índices dedicados + réplica de lectura si hace falta.
 - **Criterios:** cualquier reporte de un mes de datos < 2 s; cifras cuadran contra los ledgers en tests de reconciliación.
 
-**Fase 5 — Panel de plataforma (SaaS)**
+**Fase 5 — Panel de plataforma (SaaS) — ✅ COMPLETADA 2026-08-01**
+
+> **Qué se implementó y evidencia:** sin migración nueva — el modelo de Fase 0 ya lo soportaba, esta fase es la operativa. **Onboarding en una transacción** (`onboarding.service.ts`): tenant + dueño + tienda + caja + suscripción de prueba + categorías de gasto, devolviendo una **contraseña temporal legible por teléfono** (sin caracteres ambiguos: el super admin se la dicta al cliente por WhatsApp) que solo se muestra una vez y obliga a cambiarla al primer ingreso. **Planes** (CRUD con auditoría antes/después) y **suscripciones** que extienden desde el vencimiento vigente —renovar temprano no regala ni quita días— y **reactivan automáticamente** al cliente suspendido por mora al registrar el pago. **Métricas globales**: clientes por estado, MRR de suscripciones vigentes, volumen transado por los clientes (la métrica que dice si la plataforma se usa de verdad, no solo si hay altas), escala y una lista de **clientes que requieren atención** (sin suscripción, vencida, por vencer o sin ventas en 14 días). **Auditoría global** cruzando tenants, resolviendo nombres sin FKs (audit_logs es append-only y debe sobrevivir al borrado lógico de cualquier entidad). **Impersonación "ver como tenant" (D-028)**: token de 15 minutos, **solo lectura** (cualquier método distinto de GET → 403), sin refresh token, motivo obligatorio, auditada con `impersonating=true`, y funciona sobre tenants suspendidos (para eso es soporte) mientras el dueño real sigue bloqueado. UI: panel con tiles de métricas, listado de clientes, ficha con actividad real e historial de suscripciones, formulario de alta con sugerencia de identificador (maneja tildes y ñ), y **banner ámbar permanente** en la app de tienda durante la sesión de soporte. **85/85 tests**. Verificado E2E en navegador: alta de cliente devolviendo credenciales, métricas reales (MRR Q1,600.00, 98 ventas, 5 clientes), impersonación con lectura 200 / escritura 403 / panel de plataforma 403, y salida del modo soporte limpiando la sesión.
+> **Impacto:** el negocio SaaS ya es operable de punta a punta. Fase 6 se concentra en hardening y experiencia de hardware en tienda.
+
 - **Objetivo:** operar el negocio SaaS.
 - **Componentes:** panel Super Admin: CRUD tenants/planes/suscripciones, suspensión/reactivación (guard global), métricas globales, auditoría global, impersonación auditada ("ver como tenant" con banner y registro).
 - **Dependencias:** F0 (el modelo ya existe; esto es la UI/operativa). **Riesgos:** impersonación mal auditada — cada acción impersonada se marca en `audit_logs`.
@@ -507,6 +511,10 @@ expense_categories 1─N expenses
 | D-025 | 2026-08-01 | Bucketing de reportes por día **local de Guatemala** (`AT TIME ZONE`), no por día UTC | Un cierre de caja de las 23:30 caería en el día siguiente si se agrupara por UTC: los totales diarios no cuadrarían con lo que el tendero contó esa noche. |
 | D-026 | 2026-08-01 | `daily_store_stats` se recomputa por rango bajo demanda (borrar+reinsertar), no se actualiza incrementalmente | Idempotente por construcción: imposible que el agregado quede desincronizado del ledger. Cuando haya scheduler (Fase 6+) se llama al mismo endpoint por cron. |
 | D-027 | 2026-08-01 | CSV con **BOM UTF-8** y separador coma | Sin BOM, Excel en Windows —el destino real de estos archivos— muestra "Categorï¿½a" en vez de "Categoría". Verificado byte a byte. |
+| D-028 | 2026-08-01 | Impersonación **estrictamente de solo lectura** (403 en todo método ≠ GET), token de 15 min sin refresh, motivo obligatorio y auditada con `impersonating=true`. Actúa como el OWNER del tenant | El requisito dice "ver como tenant": soporte, no operar el negocio ajeno. Escribir como otro usuario es difícil de justificar ante un cliente y arruinaría la trazabilidad de su bitácora (¿quién hizo esa venta?). Sin refresh, la sesión muere sola y renovarla deja otra huella. |
+| D-029 | 2026-08-01 | La contraseña temporal del onboarding se genera legible (sin `l/1/O/0`), se devuelve **una sola vez** y fuerza cambio al primer ingreso | El super admin se la dicta al cliente por teléfono o WhatsApp; no se guarda en claro en ningún lado. |
+| D-030 | 2026-08-01 | Registrar un pago con estado ACTIVE **reactiva** al tenant suspendido por mora, sin paso manual aparte | El flujo real de cobranza es "me pagaron → vuelve a operar"; obligar a dos acciones invita a dejar clientes suspendidos por olvido. |
+| D-031 | 2026-08-01 | Las sesiones de plataforma y de tienda usan claves de almacenamiento distintas (`mm.platformRefresh` vs `mm.refreshToken`), y el token de soporte vive en `sessionStorage` | Permite que el super admin tenga ambas sesiones abiertas sin pisarse — que es justo lo que ocurre al usar "ver como" — y que la sesión de soporte muera al cerrar la pestaña. |
 
 ---
 

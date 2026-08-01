@@ -9,11 +9,14 @@ export interface AccessPayload {
   sub: string;            // user id o platform_user id
   ten?: string;           // tenant id (solo kind 'user')
   kind: PrincipalKind;
+  /** Super admin que está "viendo como" este tenant (D-028). Su presencia
+   *  marca la sesión como impersonada: solo lectura y todo auditado. */
+  imp?: string;
 }
 
-export function signAccessToken(payload: AccessPayload): string {
+export function signAccessToken(payload: AccessPayload, ttlMinutes?: number): string {
   return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: `${env.ACCESS_TOKEN_TTL_MIN}m`,
+    expiresIn: `${ttlMinutes ?? env.ACCESS_TOKEN_TTL_MIN}m`,
     issuer: 'minimarket-api',
   });
 }

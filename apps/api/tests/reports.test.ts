@@ -103,29 +103,31 @@ beforeAll(async () => {
   workerToken = await login('worker1@demo.local');
 
   // Tienda dedicada + caja para aislar las cifras de este archivo.
-  const storeName = `Reportes ${Date.now()}`;
-  const store = await request(app)
-    .post('/api/stores')
-    .set('Authorization', `Bearer ${ownerToken}`)
-    .send({ name: storeName });
-  expect(store.status).toBe(201);
-  storeId = store.body.id;
+  // Se crea como fixture directo (no vía API) a propósito: cada corrida necesita
+  // una tienda virgen para que los totales calculados a mano sean exactos, y
+  // hacerlo por API consumiría un cupo del plan en cada ejecución. El límite de
+  // tiendas por plan es una regla de negocio y se prueba en platform.test.ts.
+  const store = await prismaAdmin.store.create({
+    data: { id: uuidv7(), tenantId: tenantA.id, name: `Reportes ${Date.now()}` },
+  });
+  storeId = store.id;
 
-  // El trabajador también opera en esta tienda (para probar ocultamiento de costos).
   const workerId = (await prismaAdmin.user.findUniqueOrThrow({
     where: { email: 'worker1@demo.local' },
   })).id;
-  await prismaAdmin.storeMember.create({
-    data: { id: uuidv7(), tenantId: tenantA.id, storeId, userId: workerId, role: 'WORKER' },
+  await prismaAdmin.storeMember.createMany({
+    data: [
+      { id: uuidv7(), tenantId: tenantA.id, storeId, userId: ownerId, role: 'OWNER' },
+      { id: uuidv7(), tenantId: tenantA.id, storeId, userId: workerId, role: 'WORKER' },
+    ],
   });
-  workerToken = await login('worker1@demo.local'); // refresca membresías
+  ownerToken = await login('owner1@demo.local'); // refresca membresías
+  workerToken = await login('worker1@demo.local');
 
-  const register = await request(app)
-    .post('/api/cash/registers')
-    .set('Authorization', `Bearer ${ownerToken}`)
-    .send({ storeId, name: 'Caja Reportes' });
-  expect(register.status).toBe(201);
-  registerId = register.body.id;
+  const register = await prismaAdmin.cashRegister.create({
+    data: { id: uuidv7(), tenantId: tenantA.id, storeId, name: 'Caja Reportes' },
+  });
+  registerId = register.id;
 
   const session = await request(app)
     .post('/api/cash/sessions')

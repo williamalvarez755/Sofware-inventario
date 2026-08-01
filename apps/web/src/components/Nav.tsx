@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, getImpersonation, stopImpersonation } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 
 interface NotificationRow {
@@ -25,36 +25,59 @@ const LINKS = [
 export function Nav() {
   const { me, logout } = useAuth();
   const { pathname } = useLocation();
+  const impersonation = getImpersonation();
 
   if (!me) return null;
 
   return (
-    <header className="flex flex-wrap items-center gap-3 bg-white px-6 py-3 shadow-sm">
-      <span className="text-base font-bold text-emerald-700">{me.tenant.name}</span>
-      <nav className="flex flex-wrap gap-1">
-        {LINKS.map((l) => (
-          <Link
-            key={l.to}
-            to={l.to}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-              pathname === l.to ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50'
-            }`}
+    <>
+      {impersonation && (
+        <div className="flex flex-wrap items-center gap-3 bg-amber-500 px-6 py-2 text-sm font-medium text-amber-950">
+          <span>
+            👁️ Sesión de soporte — viendo <strong>{impersonation.tenantName}</strong> como{' '}
+            {impersonation.actingAs}. Solo lectura: no puede modificar datos del cliente.
+          </span>
+          <button
+            onClick={() => {
+              stopImpersonation();
+              window.location.href = '/plataforma';
+            }}
+            className="ml-auto rounded-lg bg-amber-950 px-3 py-1 text-xs font-semibold text-amber-50 hover:bg-amber-900"
           >
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-      <div className="ml-auto flex items-center gap-3">
-        <NotificationBell />
-        <span className="text-sm text-slate-500">{me.user.name}</span>
-        <button
-          onClick={logout}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-        >
-          Salir
-        </button>
-      </div>
-    </header>
+            Salir del modo soporte
+          </button>
+        </div>
+      )}
+
+      <header className="flex flex-wrap items-center gap-3 bg-white px-6 py-3 shadow-sm">
+        <span className="text-base font-bold text-emerald-700">{me.tenant.name}</span>
+        <nav className="flex flex-wrap gap-1">
+          {LINKS.map((l) => (
+            <Link
+              key={l.to}
+              to={l.to}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                pathname === l.to ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="ml-auto flex items-center gap-3">
+          {!impersonation && <NotificationBell />}
+          <span className="text-sm text-slate-500">{me.user.name}</span>
+          {!impersonation && (
+            <button
+              onClick={logout}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+            >
+              Salir
+            </button>
+          )}
+        </div>
+      </header>
+    </>
   );
 }
 

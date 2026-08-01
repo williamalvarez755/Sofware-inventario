@@ -9,6 +9,8 @@ declare global {
         kind: PrincipalKind;
         userId: string;
         tenantId?: string;
+        /** Presente solo en sesiones impersonadas: id del super admin. */
+        impersonatedBy?: string;
       };
       /** Cliente Prisma con RLS del tenant autenticado (solo kind 'user'). */
       db?: TenantClient;
