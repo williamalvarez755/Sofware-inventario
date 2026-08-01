@@ -43,6 +43,24 @@ async function seedRbac() {
   }
 }
 
+/** Unidades de medida globales (tenant_id NULL) usuales en Guatemala. */
+async function seedUnits() {
+  const units = [
+    { code: 'UNIDAD', name: 'Unidad', allowsDecimals: false },
+    { code: 'DOCENA', name: 'Docena', allowsDecimals: false },
+    { code: 'PAQUETE', name: 'Paquete', allowsDecimals: false },
+    { code: 'LIBRA', name: 'Libra', allowsDecimals: true },
+    { code: 'ONZA', name: 'Onza', allowsDecimals: true },
+    { code: 'QUINTAL', name: 'Quintal', allowsDecimals: true },
+    { code: 'LITRO', name: 'Litro', allowsDecimals: true },
+    { code: 'GALON', name: 'Galón', allowsDecimals: true },
+  ];
+  for (const u of units) {
+    const existing = await prisma.unit.findFirst({ where: { tenantId: null, code: u.code } });
+    if (!existing) await prisma.unit.create({ data: { id: uuidv7(), tenantId: null, ...u } });
+  }
+}
+
 async function seedPlans() {
   const plans = [
     { code: 'basico', name: 'Plan Básico', maxStores: 1, maxUsers: 5, monthlyPrice: 25000n },
@@ -153,7 +171,70 @@ async function seedDemoTenant(opts: {
       },
     });
   }
+  await seedDemoProducts(tenant.id, store.id, owner.id);
   return tenant;
+}
+
+/** Productos demo con stock inicial y kardex coherente (idempotente). */
+async function seedDemoProducts(tenantId: string, storeId: string, userId: string) {
+  const anyProduct = await prisma.product.findFirst({ where: { tenantId } });
+  if (anyProduct) return;
+
+  const unidad = await prisma.unit.findFirstOrThrow({ where: { tenantId: null, code: 'UNIDAD' } });
+  const libra = await prisma.unit.findFirstOrThrow({ where: { tenantId: null, code: 'LIBRA' } });
+  const category = await prisma.category.create({
+    data: { id: uuidv7(), tenantId, name: 'Abarrotes' },
+  });
+
+  const demos = [
+    { name: 'Agua pura 500ml', sku: 'AGUA-500', barcode: '7401000000017', unitId: unidad.id, price: 500n, cost: 300n, stock: 48 },
+    { name: 'Maseca 1lb', sku: 'MASECA-1', barcode: '7401000000024', unitId: unidad.id, price: 850n, cost: 620n, stock: 24 },
+    { name: 'Azúcar a granel', sku: 'AZUCAR-G', barcode: null, unitId: libra.id, price: 450n, cost: 320n, stock: 80.5 },
+  ];
+  for (const d of demos) {
+    const product = await prisma.product.create({
+      data: {
+        id: uuidv7(),
+        tenantId,
+        sku: d.sku,
+        name: d.name,
+        categoryId: category.id,
+        unitId: d.unitId,
+        basePrice: d.price,
+      },
+    });
+    if (d.barcode) {
+      await prisma.productBarcode.create({
+        data: { id: uuidv7(), tenantId, productId: product.id, barcode: d.barcode },
+      });
+    }
+    const qty = d.stock.toFixed(3);
+    await prisma.storeProduct.create({
+      data: {
+        id: uuidv7(),
+        tenantId,
+        storeId,
+        productId: product.id,
+        stockQty: qty,
+        avgCost: d.cost,
+        minStock: 10,
+      },
+    });
+    await prisma.inventoryMovement.create({
+      data: {
+        id: uuidv7(),
+        tenantId,
+        storeId,
+        productId: product.id,
+        type: 'INITIAL',
+        qty,
+        unitCost: d.cost,
+        balanceAfter: qty,
+        userId,
+        note: 'Carga inicial (seed demo)',
+      },
+    });
+  }
 }
 
 // En producción: SEED_DEMO_TENANTS=false para no crear los tenants demo.
@@ -161,6 +242,7 @@ const INCLUDE_DEMOS = process.env.SEED_DEMO_TENANTS !== 'false';
 
 async function main() {
   await seedRbac();
+  await seedUnits();
   await seedPlans();
   await seedPlatformUser();
   if (!INCLUDE_DEMOS) {

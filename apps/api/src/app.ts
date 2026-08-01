@@ -5,7 +5,18 @@ import { pinoHttp } from 'pino-http';
 import { env } from './config/env.js';
 import { errorHandler, notFoundHandler } from './lib/errors.js';
 import { logger } from './lib/logger.js';
+// BigInt (dinero en centavos) → string en JSON, en TODO punto de entrada
+// (servidor real y tests montan la app desde aquí). El front formatea con formatQ.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
+
 import { authRouter } from './modules/auth/auth.router.js';
+import { categoriesRouter } from './modules/catalog/categories.router.js';
+import { productsRouter } from './modules/catalog/products.router.js';
+import { unitsRouter } from './modules/catalog/units.router.js';
+import { inventoryRouter } from './modules/inventory/inventory.router.js';
 import { platformRouter } from './modules/platform/platform.router.js';
 import { storesRouter } from './modules/tenancy/stores.router.js';
 
@@ -34,6 +45,10 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/stores', storesRouter);
+  app.use('/api/products', productsRouter);
+  app.use('/api/categories', categoriesRouter);
+  app.use('/api/units', unitsRouter);
+  app.use('/api/inventory', inventoryRouter);
   app.use('/api/platform', platformRouter);
 
   app.use(notFoundHandler);

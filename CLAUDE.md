@@ -2,7 +2,7 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fase 0 (fundaciones) COMPLETADA** — ver §9. Próxima: Fase 1 (catálogo e inventario).
+> **Estado:** **Fases 0 y 1 COMPLETADAS** — ver §9. Próxima: Fase 2 (POS y caja).
 > **Última actualización:** 2026-07-31.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
@@ -398,7 +398,12 @@ expense_categories 1─N expenses
 - **Dependencias:** ninguna. **Riesgos:** diseñar mal la tenancy aquí contamina todo — mitigación: **tests de aislamiento automatizados** (tenant A jamás lee/escribe datos de B, con y sin filtro de app, probando que RLS solo también protege).
 - **Criterios de finalización:** dos tenants demo con usuarios; suite de aislamiento en verde; login/refresh/revocación probados; auditoría registrando; login end-to-end desde la web local; pasos de deploy a Render/Aiven documentados.
 
-**Fase 1 — Catálogo e inventario**
+**Fase 1 — Catálogo e inventario — ✅ COMPLETADA 2026-07-31**
+
+> **Qué se implementó y evidencia:** migración `catalog_inventory` (categories, units con seed global GT, products, product_barcodes, store_products, inventory_movements) con el mismo patrón RLS de Fase 0 y **kardex inmutable por trigger**. Núcleo de dominio en `movements.service.ts`: `applyMovement` (decremento atómico `UPDATE … WHERE stock_qty + qty >= 0 RETURNING` → sin carreras, `balance_after` exacto tomado del RETURNING) y `applyCostedEntry` (CPP ponderado con `FOR UPDATE`; lo reutilizará compras en Fase 3). API: CRUD de productos con categoría al vuelo y stock inicial, múltiples códigos de barras, config por tienda (mínimo/override/activo), ajustes (entrada/salida/merma/consumo, motivo obligatorio + validación de decimales por unidad + `allow_negative_stock` del tenant), kardex paginado con costos ocultos al WORKER, low-stock, **import CSV** con savepoint por fila (una fila mala no arruina el lote) y **1,000 productos en 3.1 s** (criterio < 30 s). Job de reconciliación `npm run check:stock` (reporta, nunca corrige). UI: página Productos (selector de tienda, búsqueda, alta, ajuste, kardex, import CSV). **29/29 tests** — incluye concurrencia (20 salidas paralelas sobre stock 10 → exactamente 10 éxitos, stock 0, cero discrepancias), CPP verificado, inmutabilidad del kardex a nivel BD y auditoría de cambio de precio con antes/después.
+> **Fix notable:** refresh del frontend ahora es *single-flight* — dos refresh paralelos (StrictMode o requests simultáneos con 401) hacían que la detección de reuso revocara la sesión legítima.
+> **Impacto:** Fase 2 (POS) consume `applyMovement` tal cual para ventas; Fase 3 (compras) consume `applyCostedEntry`; el patrón de import CSV sirve de plantilla para futuros imports.
+
 - **Objetivo:** el tendero carga su tienda.
 - **Componentes:** CRUD productos/categorías/unidades/códigos de barras, `store_products`, ajustes/merma/consumo con kardex, vista kardex por producto, importación CSV inicial de productos.
 - **Dependencias:** F0. **Riesgos:** modelar mal producto-vs-tienda — ya resuelto en diseño (§5.2).

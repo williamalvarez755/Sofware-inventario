@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { ProductsPage } from './pages/ProductsPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { me, loading } = useAuth();
@@ -26,6 +27,14 @@ export function App() {
             element={
               <Protected>
                 <DashboardPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/productos"
+            element={
+              <Protected>
+                <ProductsPage />
               </Protected>
             }
           />

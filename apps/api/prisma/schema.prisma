@@ -211,6 +211,135 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+// ─────────────────────────── Catálogo (Fase 1) ───────────────────────────
+
+model Category {
+  id        String    @id @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  name      String
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+model Unit {
+  id             String  @id @db.Uuid
+  tenantId       String? @map("tenant_id") @db.Uuid // NULL = seed global
+  code           String
+  name           String
+  allowsDecimals Boolean @default(false) @map("allows_decimals")
+
+  products Product[]
+
+  @@unique([tenantId, code])
+  @@map("units")
+}
+
+model Product {
+  id          String    @id @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  sku         String
+  name        String
+  description String?
+  categoryId  String?   @map("category_id") @db.Uuid
+  unitId      String    @map("unit_id") @db.Uuid
+  basePrice   BigInt    @map("base_price") // centavos, IVA incluido
+  isActive    Boolean   @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  category      Category?           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  unit          Unit                @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  barcodes      ProductBarcode[]
+  storeProducts StoreProduct[]
+  movements     InventoryMovement[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, name])
+  @@map("products")
+}
+
+model ProductBarcode {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  barcode   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, barcode])
+  @@index([productId])
+  @@map("product_barcodes")
+}
+
+// Existencia del producto POR TIENDA. stock_qty es materializado: la fuente
+// de verdad es inventory_movements (job de consistencia los reconcilia).
+model StoreProduct {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  storeId       String   @map("store_id") @db.Uuid
+  productId     String   @map("product_id") @db.Uuid
+  stockQty      Decimal  @default(0) @map("stock_qty") @db.Decimal(12, 3)
+  avgCost       BigInt   @default(0) @map("avg_cost") // CPP en centavos
+  minStock      Decimal  @default(0) @map("min_stock") @db.Decimal(12, 3)
+  priceOverride BigInt?  @map("price_override")
+  isActive      Boolean  @default(true) @map("is_active")
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([storeId, productId])
+  @@index([storeId])
+  @@map("store_products")
+}
+
+// ─────────────────────────── Inventario: kardex ───────────────────────────
+
+enum MovementType {
+  INITIAL
+  PURCHASE
+  PURCHASE_VOID
+  SALE
+  SALE_VOID
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  WASTE
+  INTERNAL_USE
+  RETURN_IN
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+// Ledger INMUTABLE (trigger anti UPDATE/DELETE en la migración).
+model InventoryMovement {
+  id           String       @id @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  storeId      String       @map("store_id") @db.Uuid
+  productId    String       @map("product_id") @db.Uuid
+  type         MovementType
+  qty          Decimal      @db.Decimal(12, 3) // con signo: + entra, − sale
+  unitCost     BigInt       @default(0) @map("unit_cost")
+  balanceAfter Decimal      @map("balance_after") @db.Decimal(12, 3)
+  refType      String?      @map("ref_type")
+  refId        String?      @map("ref_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  note         String?
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([storeId, productId, createdAt(sort: Desc)])
+  @@index([refType, refId])
+  @@map("inventory_movements")
+}
+
 // ─────────────────────────── Auditoría ───────────────────────────
 
 model AuditLog {

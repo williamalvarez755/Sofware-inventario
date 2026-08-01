@@ -11,6 +11,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
+    "check:stock": "tsx scripts/check-stock.ts",
     "test": "vitest run"
   },
   "prisma": {

@@ -42,7 +42,22 @@ async function rawRequest(path: string, options: RequestInit = {}): Promise<Resp
   });
 }
 
-async function tryRefresh(): Promise<boolean> {
+/**
+ * Refresh SINGLE-FLIGHT: si varios requests reciben 401 a la vez (o StrictMode
+ * duplica un efecto), todos comparten UNA sola llamada de refresh. Sin esto,
+ * el segundo refresh enviaría el token ya rotado y la detección de reuso del
+ * backend revocaría la familia completa (cerraría la sesión por "seguridad").
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  refreshInFlight ??= doRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function doRefresh(): Promise<boolean> {
   const refreshToken = localStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return false;
   const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
