@@ -2,7 +2,7 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fases 0, 1 y 2 COMPLETADAS** — ver §9. Próxima: Fase 3 (compras, proveedores y gastos).
+> **Estado:** **Fases 0 a 3 COMPLETADAS** — ver §9. Próxima: Fase 4 (reportes y alertas).
 > **Última actualización:** 2026-07-31.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
@@ -419,7 +419,11 @@ expense_categories 1─N expenses
 - **Dependencias:** F1. **Riesgos:** carreras de stock y doble cobro — mitigación: decremento atómico + idempotencia + tests de concurrencia.
 - **Criterios:** venta completa < 10 s de principio a fin; arqueo cuadra al centavo en pruebas de turno completo; anulación deja inventario y caja exactamente compensados.
 
-**Fase 3 — Compras, proveedores y gastos**
+**Fase 3 — Compras, proveedores y gastos — ✅ COMPLETADA 2026-07-31**
+
+> **Qué se implementó y evidencia:** migración `suppliers_purchases_expenses` (suppliers, product_suppliers, purchases, purchase_items, expense_categories, expenses) con RLS, `purchase_items` inmutables, **trigger `purchases_guard`** (solo RECEIVED→VOIDED) y gastos sin DELETE. **Recepción de compras** en una transacción: líneas + `applyCostedEntry` (recálculo de CPP) + upsert de `product_suppliers` (último costo por proveedor) + auditoría. **Anulación con reversa exacta de CPP**: nueva `applyCostedExit` en el núcleo de inventario deshace la ponderación usando el costo de la compra anulada (`cpp' = (stock×cpp − qty×costo)/(stock−qty)`), y exige stock suficiente SIEMPRE — si parte de la mercadería ya salió, la compra no puede anularse (probado). **Gastos**: justificación obligatoria, opcionalmente pagados desde la caja abierta (EXPENSE_OUT en el ledger de la sesión con validación de fondos — impacta el arqueo al centavo, probado), monto inmutable (solo categoría/descripción editables, con auditoría antes/después), trabajador puede registrar pero no editar. Nuevo permiso `expenses.categories` (OWNER/STORE_ADMIN). El módulo de compras entero exige `purchases.receive` — un WORKER no ve costos de compra (A10). UI: páginas Compras (recepción multi-línea con búsqueda de productos, anulación), Gastos (con "pagar desde caja abierta") y Proveedores (CRUD + inactivación si tiene historial). **47/47 tests** — CPP contra casos a mano ((10×500+10×700)/20=600; (20×600+30×800)/50=720), reversa de anulación exacta (600→500), compra de 50 líneas < 1 s (criterio 5 s), arqueo con gasto de caja cuadrando a Q0.00. Verificado E2E en navegador: compra de 10 Maseca a Q7.00 → stock 24→34, CPP 620→**644** centavos (mano: 21880/34), tenant B intacto.
+> **Impacto:** el ciclo operativo completo (comprar → vender → cuadrar caja → gastar) está cerrado; Fase 4 solo lee de ledgers consistentes.
+
 - **Objetivo:** ciclo completo de reposición y costo real.
 - **Componentes:** CRUD proveedores, recepción de compras con recálculo CPP, `product_suppliers`, gastos con categorías y evidencia (S3), anulación de compra.
 - **Dependencias:** F1 (kardex), F2 (gastos desde caja). **Riesgos:** CPP con compras retroactivas — v1 solo permite compra a fecha actual (decisión D-011).
@@ -493,6 +497,8 @@ expense_categories 1─N expenses
 | D-019 | 2026-07-31 | Auditoría por llamada explícita `audit(tx, …)` en cada servicio, dentro de la misma transacción — no interceptor genérico | En Express, la llamada visible es más fiable (no hay acción auditable sin su línea de audit a la vista) y trivial de revisar. |
 | D-020 | 2026-07-31 | Redis/BullMQ pospuestos a Fase 4 (rate limit y cache en memoria mientras haya una sola instancia); particionado de ledgers pospuesto hasta que el volumen lo amerite (se activa por migración SQL sin romper nada) | YAGNI aplicado a infraestructura: el diseño reserva los puntos de corte, el costo se paga cuando el problema existe. |
 | D-021 | 2026-07-31 | Refresh token en `localStorage` en v1 (rotación + detección de reuso como mitigación), migrar a cookie `httpOnly` al tener dominio propio | `onrender.com` está en la Public Suffix List: el Static Site y el Web Service no pueden compartir cookies entre subdominios de Render. |
+| D-022 | 2026-07-31 | Subida de evidencias (fotos de retiros/gastos) pospuesta hasta tener bucket R2/S3 (Fase 6); el campo `evidence_url` ya existe en los modelos | Sin credenciales de storage no hay nada que verificar; el modelo no bloquea la integración futura (URLs prefirmadas). |
+| D-023 | 2026-07-31 | Las compras NO se vinculan a caja en v1 (no hay pago contado/crédito modelado); son recepciones de inventario. El pago al proveedor se registra, si sale de caja, como retiro o gasto | Cuentas por pagar es contabilidad de proveedores — dominio propio que merece su fase (va al backlog); mezclarlo ahora ensuciaría el arqueo. |
 
 ---
 

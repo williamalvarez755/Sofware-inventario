@@ -260,6 +260,8 @@ model Product {
   storeProducts StoreProduct[]
   movements     InventoryMovement[]
   saleItems     SaleItem[]
+  supplierLinks ProductSupplier[]
+  purchaseItems PurchaseItem[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, name])
@@ -507,6 +509,126 @@ model SalePayment {
 
   @@index([saleId])
   @@map("sale_payments")
+}
+
+// ──────────────── Proveedores, compras y gastos (Fase 3) ────────────────
+
+model Supplier {
+  id          String    @id @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  name        String
+  taxId       String?   @map("tax_id") // NIT
+  contactName String?   @map("contact_name")
+  phone       String?
+  email       String?
+  notes       String?
+  isActive    Boolean   @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  purchases    Purchase[]
+  productLinks ProductSupplier[]
+
+  @@unique([tenantId, name])
+  @@map("suppliers")
+}
+
+// Relación producto↔proveedor: último costo para agilizar la recepción.
+model ProductSupplier {
+  tenantId       String    @map("tenant_id") @db.Uuid
+  productId      String    @map("product_id") @db.Uuid
+  supplierId     String    @map("supplier_id") @db.Uuid
+  supplierSku    String?   @map("supplier_sku")
+  lastCost       BigInt?   @map("last_cost")
+  lastPurchaseAt DateTime? @map("last_purchase_at") @db.Timestamptz()
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@id([productId, supplierId])
+  @@map("product_suppliers")
+}
+
+enum PurchaseStatus {
+  RECEIVED
+  VOIDED
+}
+
+// Las compras no se borran; solo transición RECEIVED→VOIDED (trigger).
+model Purchase {
+  id              String         @id @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  storeId         String         @map("store_id") @db.Uuid
+  supplierId      String         @map("supplier_id") @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  status          PurchaseStatus @default(RECEIVED)
+  supplierInvoice String?        @map("supplier_invoice")
+  purchasedAt     DateTime       @default(now()) @map("purchased_at") @db.Timestamptz()
+  total           BigInt
+  notes           String?
+  voidedAt        DateTime?      @map("voided_at") @db.Timestamptz()
+  voidedBy        String?        @map("voided_by") @db.Uuid
+  voidReason      String?        @map("void_reason")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+
+  supplier Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    PurchaseItem[]
+
+  @@index([storeId, purchasedAt(sort: Desc)])
+  @@index([supplierId, purchasedAt(sort: Desc)])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String  @id @db.Uuid
+  tenantId   String  @map("tenant_id") @db.Uuid
+  purchaseId String  @map("purchase_id") @db.Uuid
+  productId  String  @map("product_id") @db.Uuid
+  qty        Decimal @db.Decimal(12, 3)
+  unitCost   BigInt  @map("unit_cost")
+  lineTotal  BigInt  @map("line_total")
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseId])
+  @@index([productId])
+  @@map("purchase_items")
+}
+
+model ExpenseCategory {
+  id        String    @id @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  name      String
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+
+  expenses Expense[]
+
+  @@unique([tenantId, name])
+  @@map("expense_categories")
+}
+
+// Gastos: sin DELETE (trigger); monto inmutable, solo categoría/descripción
+// editables (validado en dominio y auditado).
+model Expense {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  storeId       String   @map("store_id") @db.Uuid
+  categoryId    String   @map("category_id") @db.Uuid
+  cashSessionId String?  @map("cash_session_id") @db.Uuid // si salió de caja
+  userId        String   @map("user_id") @db.Uuid
+  amount        BigInt
+  description   String
+  evidenceUrl   String?  @map("evidence_url")
+  expensedAt    DateTime @default(now()) @map("expensed_at") @db.Timestamptz()
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([storeId, expensedAt(sort: Desc)])
+  @@map("expenses")
 }
 
 // ─────────────────────────── Auditoría ───────────────────────────

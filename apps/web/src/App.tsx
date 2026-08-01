@@ -5,6 +5,9 @@ import { LoginPage } from './pages/LoginPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { PosPage } from './pages/PosPage';
 import { CashPage } from './pages/CashPage';
+import { PurchasesPage } from './pages/PurchasesPage';
+import { ExpensesPage } from './pages/ExpensesPage';
+import { SuppliersPage } from './pages/SuppliersPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { me, loading } = useAuth();
@@ -53,6 +56,30 @@ export function App() {
             element={
               <Protected>
                 <CashPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/compras"
+            element={
+              <Protected>
+                <PurchasesPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/gastos"
+            element={
+              <Protected>
+                <ExpensesPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/proveedores"
+            element={
+              <Protected>
+                <SuppliersPage />
               </Protected>
             }
           />

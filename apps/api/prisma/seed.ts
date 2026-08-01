@@ -182,6 +182,26 @@ async function seedDemoTenant(opts: {
     });
   }
 
+  // Categorías de gasto iniciales y proveedor demo
+  for (const name of ['Servicios (luz/agua)', 'Transporte', 'Limpieza', 'Otros']) {
+    await prisma.expenseCategory.upsert({
+      where: { tenantId_name: { tenantId: tenant.id, name } },
+      update: {},
+      create: { id: uuidv7(), tenantId: tenant.id, name },
+    });
+  }
+  await prisma.supplier.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: 'Distribuidora El Centro' } },
+    update: {},
+    create: {
+      id: uuidv7(),
+      tenantId: tenant.id,
+      name: 'Distribuidora El Centro',
+      contactName: 'Carlos Pérez',
+      phone: '5555-1234',
+    },
+  });
+
   await seedDemoProducts(tenant.id, store.id, owner.id);
   return tenant;
 }

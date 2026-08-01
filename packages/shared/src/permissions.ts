@@ -27,6 +27,7 @@ export const PERMISSIONS = {
   PURCHASES_RECEIVE: 'purchases.receive',
   SUPPLIERS_MANAGE: 'suppliers.manage',
   EXPENSES_CREATE: 'expenses.create',
+  EXPENSE_CATEGORIES_MANAGE: 'expenses.categories',
   // Reportes y costos (Fase 4)
   REPORTS_VIEW: 'reports.view',
   COSTS_VIEW: 'costs.view',              // ver costos/márgenes/utilidad — NUNCA worker
@@ -50,6 +51,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionCode, string> = {
   'purchases.receive': 'Registrar compras a proveedores',
   'suppliers.manage': 'Administrar proveedores',
   'expenses.create': 'Registrar gastos',
+  'expenses.categories': 'Administrar categorías de gasto y editar gastos',
   'reports.view': 'Ver reportes de la tienda',
   'costs.view': 'Ver costos, márgenes y utilidades',
 };

@@ -6,6 +6,9 @@ const LINKS = [
   { to: '/pos', label: 'POS' },
   { to: '/caja', label: 'Caja' },
   { to: '/productos', label: 'Productos' },
+  { to: '/compras', label: 'Compras' },
+  { to: '/gastos', label: 'Gastos' },
+  { to: '/proveedores', label: 'Proveedores' },
 ];
 
 export function Nav() {

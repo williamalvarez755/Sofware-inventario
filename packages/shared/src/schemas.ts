@@ -170,3 +170,70 @@ export const salesListQuerySchema = z.object({
   sessionId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
 });
+
+// ---- Proveedores y compras (Fase 3) ----
+export const supplierSchema = z.object({
+  name: z.string().trim().min(2, 'Nombre muy corto').max(80),
+  taxId: z.string().trim().max(20).optional(),
+  contactName: z.string().trim().max(80).optional(),
+  phone: z.string().trim().max(20).optional(),
+  email: z.string().email().toLowerCase().trim().optional(),
+  notes: z.string().trim().max(300).optional(),
+});
+export type SupplierInput = z.infer<typeof supplierSchema>;
+
+export const supplierUpdateSchema = supplierSchema.partial().extend({
+  isActive: z.boolean().optional(),
+});
+
+export const purchaseCreateSchema = z.object({
+  storeId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  supplierInvoice: z.string().trim().max(40).optional(),
+  notes: z.string().trim().max(300).optional(),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().uuid(),
+        qty: stockQty,
+        unitCost: z.number().int().positive('Costo en centavos, mayor que cero').max(999_999_999),
+      }),
+    )
+    .min(1, 'La compra necesita al menos un producto'),
+});
+export type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
+
+export const voidPurchaseSchema = z.object({
+  reason: z.string().trim().min(3, 'El motivo es obligatorio').max(300),
+});
+
+export const purchasesListQuerySchema = z.object({
+  storeId: z.string().uuid(),
+  supplierId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+});
+
+// ---- Gastos (Fase 3) ----
+export const expenseCategorySchema = z.object({
+  name: z.string().trim().min(2, 'Nombre muy corto').max(60),
+});
+
+export const expenseCreateSchema = z.object({
+  storeId: z.string().uuid(),
+  categoryId: z.string().uuid(),
+  amount: z.number().int().positive('Monto en centavos, mayor que cero').max(999_999_999),
+  description: z.string().trim().min(3, 'La justificación es obligatoria').max(300),
+  cashSessionId: z.string().uuid().optional(), // si el gasto sale de la caja abierta
+});
+export type ExpenseCreateInput = z.infer<typeof expenseCreateSchema>;
+
+export const expenseUpdateSchema = z.object({
+  categoryId: z.string().uuid().optional(),
+  description: z.string().trim().min(3).max(300).optional(),
+});
+
+export const expensesListQuerySchema = z.object({
+  storeId: z.string().uuid(),
+  categoryId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+});

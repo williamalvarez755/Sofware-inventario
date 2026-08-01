@@ -186,3 +186,75 @@ export async function applyCostedEntry(
   });
   return { movementId, balanceAfter, unitCost: input.unitCost };
 }
+
+/**
+ * Salida CON reversa de CPP — anulación de compra (CLAUDE.md §6.3):
+ * deshace la ponderación que esa entrada produjo:
+ *   cpp' = (stock × cpp − qty × costo_de_esa_compra) / (stock − qty)
+ * Exige stock suficiente SIEMPRE (si ya se vendió parte de la mercadería,
+ * la compra no puede anularse), sin importar allow_negative_stock.
+ */
+export async function applyCostedExit(
+  tx: Tx,
+  tenantId: string,
+  input: {
+    storeId: string;
+    productId: string;
+    type: Extract<MovementType, 'PURCHASE_VOID'>;
+    qty: number; // siempre positiva
+    unitCost: bigint; // costo unitario de la entrada que se revierte
+    userId: string;
+    refType?: string;
+    refId?: string;
+    note?: string;
+  },
+): Promise<MovementResult> {
+  const qty = toDecimalString(input.qty);
+  const current = await tx.$queryRaw<{ stock_qty: Prisma.Decimal; avg_cost: bigint }[]>`
+    SELECT stock_qty, avg_cost FROM store_products
+    WHERE store_id = ${input.storeId}::uuid AND product_id = ${input.productId}::uuid
+    FOR UPDATE`;
+  const row = current[0];
+  if (!row) throw new AppError(404, 'NOT_FOUND', 'Producto sin existencia en la tienda');
+
+  const prevStock = Number(row.stock_qty);
+  const outQty = Number(qty);
+  if (prevStock < outQty) {
+    throw new AppError(
+      409,
+      'STOCK_INSUFFICIENT',
+      'No hay stock suficiente para anular: parte de la mercadería ya salió',
+    );
+  }
+  const newStock = prevStock - outQty;
+  const prevCost = Number(row.avg_cost);
+  const newAvg =
+    newStock <= 0
+      ? prevCost // sin base para recalcular: conserva el CPP vigente
+      : Math.max(
+          0,
+          Math.round((prevStock * prevCost - outQty * Number(input.unitCost)) / newStock),
+        );
+
+  const updated = await tx.$queryRaw<{ stock_qty: Prisma.Decimal }[]>`
+    UPDATE store_products
+    SET stock_qty = stock_qty - ${qty}::numeric, avg_cost = ${newAvg}, updated_at = now()
+    WHERE store_id = ${input.storeId}::uuid AND product_id = ${input.productId}::uuid
+    RETURNING stock_qty`;
+
+  const balanceAfter = updated[0]!.stock_qty.toFixed(3);
+  const movementId = await insertMovement(tx, {
+    tenantId,
+    storeId: input.storeId,
+    productId: input.productId,
+    type: input.type,
+    qty: `-${qty}`,
+    unitCost: input.unitCost,
+    balanceAfter,
+    userId: input.userId,
+    refType: input.refType,
+    refId: input.refId,
+    note: input.note,
+  });
+  return { movementId, balanceAfter, unitCost: input.unitCost };
+}
