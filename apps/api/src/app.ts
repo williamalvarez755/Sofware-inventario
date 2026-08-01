@@ -1,0 +1,42 @@
+import cors from 'cors';
+import express from 'express';
+import helmet from 'helmet';
+import { pinoHttp } from 'pino-http';
+import { env } from './config/env.js';
+import { errorHandler, notFoundHandler } from './lib/errors.js';
+import { logger } from './lib/logger.js';
+import { authRouter } from './modules/auth/auth.router.js';
+import { platformRouter } from './modules/platform/platform.router.js';
+import { storesRouter } from './modules/tenancy/stores.router.js';
+
+export function createApp() {
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1); // Render corre detrás de proxy
+
+  app.use(helmet());
+  app.use(cors({ origin: env.CORS_ORIGIN.split(',') }));
+  app.use(express.json({ limit: '1mb' }));
+  app.use(
+    pinoHttp({
+      logger,
+      autoLogging: env.NODE_ENV !== 'test',
+      customProps: (req) => ({
+        tenantId: (req as express.Request).auth?.tenantId,
+        userId: (req as express.Request).auth?.userId,
+      }),
+    }),
+  );
+
+  app.get('/health', (_req, res) => {
+    res.json({ ok: true, ts: new Date().toISOString() });
+  });
+
+  app.use('/api/auth', authRouter);
+  app.use('/api/stores', storesRouter);
+  app.use('/api/platform', platformRouter);
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+  return app;
+}

@@ -1,0 +1,235 @@
+// Esquema Prisma — Fase 0: plataforma + identidad.
+// El diseño completo (todas las fases) vive en docs/schema.sql; este archivo
+// crece por fases. Dinero: BigInt en centavos de GTQ. Ver CLAUDE.md §5.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // URL de ADMIN (migraciones/seed/plataforma). El runtime tenant usa
+  // APP_DATABASE_URL (rol sin BYPASSRLS) — ver src/lib/prisma.ts.
+  url      = env("DATABASE_URL")
+  provider = "postgresql"
+}
+
+// ─────────────────────────── Plataforma ───────────────────────────
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum TaxRegime {
+  GENERAL
+  PEQUENO_CONTRIBUYENTE
+  NINGUNO
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+model Plan {
+  id           String   @id @db.Uuid
+  code         String   @unique
+  name         String
+  maxStores    Int      @map("max_stores")
+  maxUsers     Int      @map("max_users")
+  monthlyPrice BigInt   @map("monthly_price")
+  features     Json     @default("{}")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Tenant {
+  id              String       @id @db.Uuid
+  name            String
+  slug            String       @unique
+  status          TenantStatus @default(ACTIVE)
+  suspendedReason String?      @map("suspended_reason")
+  contactName     String?      @map("contact_name")
+  contactEmail    String?      @map("contact_email")
+  contactPhone    String?      @map("contact_phone")
+  taxId           String?      @map("tax_id")
+  taxRegime       TaxRegime    @default(NINGUNO) @map("tax_regime")
+  settings        Json         @default("{}")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
+
+  subscriptions Subscription[]
+  users         User[]
+  stores        Store[]
+
+  @@map("tenants")
+}
+
+model Subscription {
+  id          String             @id @db.Uuid
+  tenantId    String             @map("tenant_id") @db.Uuid
+  planId      String             @map("plan_id") @db.Uuid
+  status      SubscriptionStatus @default(ACTIVE)
+  periodStart DateTime           @map("period_start") @db.Date
+  periodEnd   DateTime           @map("period_end") @db.Date
+  amount      BigInt
+  paymentNote String?            @map("payment_note")
+  createdBy   String?            @map("created_by") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, periodEnd(sort: Desc)])
+  @@map("subscriptions")
+}
+
+model PlatformUser {
+  id           String   @id @db.Uuid
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  totpSecret   String?  @map("totp_secret")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("platform_users")
+}
+
+// ─────────────────────────── Identidad (tenant) ───────────────────────────
+
+enum MemberRole {
+  OWNER
+  STORE_ADMIN
+  WORKER
+}
+
+model User {
+  id                 String    @id @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  email              String    @unique // único GLOBAL en v1 (D-018)
+  name               String
+  phone              String?
+  passwordHash       String    @map("password_hash")
+  supervisorPinHash  String?   @map("supervisor_pin_hash")
+  mustChangePassword Boolean   @default(true) @map("must_change_password")
+  isActive           Boolean   @default(true) @map("is_active")
+  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz()
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  memberships StoreMember[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Store {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  name          String
+  address       String?
+  phone         String?
+  receiptHeader String?  @map("receipt_header")
+  receiptFooter String?  @map("receipt_footer")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  members StoreMember[]
+
+  @@unique([tenantId, name])
+  @@map("stores")
+}
+
+model StoreMember {
+  id               String     @id @db.Uuid
+  tenantId         String     @map("tenant_id") @db.Uuid
+  storeId          String     @map("store_id") @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  role             MemberRole
+  extraPermissions Json       @default("[]") @map("extra_permissions")
+  isActive         Boolean    @default(true) @map("is_active")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([storeId, userId])
+  @@index([userId])
+  @@map("store_members")
+}
+
+// Catálogo RBAC persistido (la evaluación v1 usa las constantes de
+// @minimarket/shared; estas tablas documentan y habilitan roles custom futuros)
+model Permission {
+  id          Int    @id @default(autoincrement())
+  code        String @unique
+  description String
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  role         String
+  permissionId Int    @map("permission_id")
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([role, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id             String    @id @db.Uuid
+  tenantId       String?   @map("tenant_id") @db.Uuid
+  userId         String?   @map("user_id") @db.Uuid
+  platformUserId String?   @map("platform_user_id") @db.Uuid
+  tokenHash      String    @unique @map("token_hash")
+  familyId       String    @map("family_id") @db.Uuid
+  deviceInfo     String?   @map("device_info")
+  ip             String?
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz()
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz()
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────── Auditoría ───────────────────────────
+
+model AuditLog {
+  id             String   @id @db.Uuid
+  tenantId       String?  @map("tenant_id") @db.Uuid
+  storeId        String?  @map("store_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  platformUserId String?  @map("platform_user_id") @db.Uuid
+  impersonating  Boolean  @default(false)
+  action         String
+  entityType     String?  @map("entity_type")
+  entityId       String?  @map("entity_id") @db.Uuid
+  before         Json?
+  after          Json?
+  ip             String?
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
