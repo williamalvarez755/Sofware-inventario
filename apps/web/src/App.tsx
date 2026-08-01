@@ -8,6 +8,7 @@ import { CashPage } from './pages/CashPage';
 import { PurchasesPage } from './pages/PurchasesPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { SuppliersPage } from './pages/SuppliersPage';
+import { ReportsPage } from './pages/ReportsPage';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { me, loading } = useAuth();
@@ -80,6 +81,14 @@ export function App() {
             element={
               <Protected>
                 <SuppliersPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/reportes"
+            element={
+              <Protected>
+                <ReportsPage />
               </Protected>
             }
           />

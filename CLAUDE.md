@@ -2,8 +2,8 @@
 
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
-> **Estado:** **Fases 0 a 3 COMPLETADAS** — ver §9. Próxima: Fase 4 (reportes y alertas).
-> **Última actualización:** 2026-07-31.
+> **Estado:** **Fases 0 a 4 COMPLETADAS** — ver §9. Próxima: Fase 5 (panel de plataforma SaaS).
+> **Última actualización:** 2026-08-01.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
 
@@ -429,7 +429,11 @@ expense_categories 1─N expenses
 - **Dependencias:** F1 (kardex), F2 (gastos desde caja). **Riesgos:** CPP con compras retroactivas — v1 solo permite compra a fecha actual (decisión D-011).
 - **Criterios:** CPP verificado contra casos calculados a mano; compra de 50 líneas < 5 s; evidencias subiendo a S3 con URLs prefirmadas.
 
-**Fase 4 — Reportes y alertas**
+**Fase 4 — Reportes y alertas — ✅ COMPLETADA 2026-08-01**
+
+> **Qué se implementó y evidencia:** migración `alerts_notifications_stats` (stock_alerts con índice parcial "una alerta ACTIVE por producto-tienda", notifications, daily_store_stats) con RLS. **Módulo de reportes** (`reports.service.ts`): dashboard con KPIs y serie diaria, utilidades por producto con margen, ventas agrupables por día/usuario/categoría/producto/tienda, gastos por tipo, sesiones de caja con arqueos, inventario valorizado, stock bajo, compras por proveedor, ventas anuladas, resumen financiero por tienda y auditoría filtrable (con vista de solo acciones críticas). Todo sale de los **ledgers**, nunca de campos recalculados. **Zona horaria explícita**: el bucketing por día usa `AT TIME ZONE 'America/Guatemala'` — un corte de las 23:30 pertenece a su día local, no al siguiente día UTC. **Alertas de stock** evaluadas dentro de la transacción del movimiento (`alerts.ts`, D-020: sin colas): episodios únicos, notificación in-app a los admins solo al ABRIR el episodio (anti-spam), resolución automática al reponer. **Exportación CSV** con BOM UTF-8 (sin él Excel en Windows destroza las tildes) y escapado de comas/comillas. **Agregados diarios** recomputados de forma idempotente desde los ledgers — correrlo dos veces da el mismo resultado, no hay drift posible. UI: dashboard con stat tiles, gráfico de barras de ventas por día (una sola serie, color validado ≥3:1, tooltip por barra, tope de ancho de barra) y lista de stock bajo; página de Reportes con selector, rango de fechas y descarga CSV; campana de notificaciones en la barra. **68/68 tests** — reconciliación contra los ledgers y contra valores a mano (ventas Q220.00, costo Q145.00, utilidad Q75.00, ticket Q110.00), coherencia entre las 5 agrupaciones (todas suman igual), arqueo de caja cuadrando con el ledger, idempotencia de agregados, ciclo completo de alertas (abre→no duplica→resuelve→reabre) y rendimiento < 2 s. Verificado E2E en navegador: dashboard mostró Q1,889.50 / 52 ventas / utilidad Q839.30, **idéntico a la consulta SQL directa sobre el ledger**; resumen financiero con aritmética correcta por tienda; CSV descargado con BOM verificado byte a byte (`EF BB BF`).
+> **Impacto:** cierra la promesa funcional del producto para el dueño. Fase 5 (plataforma) reutiliza el patrón de reportes para las métricas globales del Super Admin.
+
 - **Objetivo:** el dueño ve su negocio sin estar en la tienda.
 - **Componentes:** dashboard por tienda, reportes: ventas (fecha/usuario/categoría/tienda), utilidades por producto, gastos por tipo, movimientos de caja, ventas anuladas, inventario y stock bajo, compras por proveedor; exportación CSV; alertas de stock (job + notificaciones in-app); agregados `daily_store_stats`.
 - **Dependencias:** F2, F3. **Riesgos:** reportes lentos — mitigación: agregados precalculados + índices dedicados + réplica de lectura si hace falta.
@@ -499,6 +503,10 @@ expense_categories 1─N expenses
 | D-021 | 2026-07-31 | Refresh token en `localStorage` en v1 (rotación + detección de reuso como mitigación), migrar a cookie `httpOnly` al tener dominio propio | `onrender.com` está en la Public Suffix List: el Static Site y el Web Service no pueden compartir cookies entre subdominios de Render. |
 | D-022 | 2026-07-31 | Subida de evidencias (fotos de retiros/gastos) pospuesta hasta tener bucket R2/S3 (Fase 6); el campo `evidence_url` ya existe en los modelos | Sin credenciales de storage no hay nada que verificar; el modelo no bloquea la integración futura (URLs prefirmadas). |
 | D-023 | 2026-07-31 | Las compras NO se vinculan a caja en v1 (no hay pago contado/crédito modelado); son recepciones de inventario. El pago al proveedor se registra, si sale de caja, como retiro o gasto | Cuentas por pagar es contabilidad de proveedores — dominio propio que merece su fase (va al backlog); mezclarlo ahora ensuciaría el arqueo. |
+| D-024 | 2026-08-01 | El WORKER **no entra** al módulo de reportes (403); su "reporte de turno" es el detalle de su sesión de caja (Fase 2). El ocultamiento de costos (`costs.view`) sigue siendo load-bearing porque un tenant puede delegar `reports.view` a un trabajador vía `extraPermissions` | Cumple la matriz §3.2 ("solo su turno") sin construir un segundo módulo de reportes recortado. Un test cubre explícitamente el caso delegado: ve ventas, nunca costos ni utilidades. |
+| D-025 | 2026-08-01 | Bucketing de reportes por día **local de Guatemala** (`AT TIME ZONE`), no por día UTC | Un cierre de caja de las 23:30 caería en el día siguiente si se agrupara por UTC: los totales diarios no cuadrarían con lo que el tendero contó esa noche. |
+| D-026 | 2026-08-01 | `daily_store_stats` se recomputa por rango bajo demanda (borrar+reinsertar), no se actualiza incrementalmente | Idempotente por construcción: imposible que el agregado quede desincronizado del ledger. Cuando haya scheduler (Fase 6+) se llama al mismo endpoint por cron. |
+| D-027 | 2026-08-01 | CSV con **BOM UTF-8** y separador coma | Sin BOM, Excel en Windows —el destino real de estos archivos— muestra "Categorï¿½a" en vez de "Categoría". Verificado byte a byte. |
 
 ---
 

@@ -237,3 +237,43 @@ export const expensesListQuerySchema = z.object({
   categoryId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
 });
+
+// ---- Reportes (Fase 4) ----
+/** Fechas en formato YYYY-MM-DD, interpretadas en horario de Guatemala. */
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use el formato AAAA-MM-DD');
+
+export const reportRangeSchema = z
+  .object({
+    storeId: z.string().uuid().optional(), // omitido = todas las tiendas visibles
+    from: isoDate,
+    to: isoDate,
+    format: z.enum(['json', 'csv']).default('json'),
+  })
+  .refine((v) => v.from <= v.to, { message: 'El rango de fechas está invertido' });
+export type ReportRange = z.infer<typeof reportRangeSchema>;
+
+export const salesReportSchema = reportRangeSchema.innerType().extend({
+  groupBy: z.enum(['day', 'user', 'category', 'store', 'product']).default('day'),
+});
+
+export const auditQuerySchema = z.object({
+  storeId: z.string().uuid().optional(),
+  action: z.string().trim().max(60).optional(),
+  userId: z.string().uuid().optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+});
+
+/** Acciones consideradas críticas para la vista de auditoría por defecto. */
+export const CRITICAL_ACTIONS = [
+  'sale.void',
+  'cash.withdrawal',
+  'cash.close',
+  'inventory.adjust',
+  'product.price_change',
+  'purchase.void',
+  'expense.update',
+  'auth.login_failed',
+  'auth.refresh_reuse_detected',
+] as const;

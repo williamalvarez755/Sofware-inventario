@@ -19,7 +19,9 @@ import { unitsRouter } from './modules/catalog/units.router.js';
 import { cashRouter } from './modules/cash/cash.router.js';
 import { expensesRouter } from './modules/expenses/expenses.router.js';
 import { inventoryRouter } from './modules/inventory/inventory.router.js';
+import { notificationsRouter } from './modules/notifications/notifications.router.js';
 import { platformRouter } from './modules/platform/platform.router.js';
+import { reportsRouter } from './modules/reports/reports.router.js';
 import { purchasesRouter } from './modules/purchasing/purchases.router.js';
 import { suppliersRouter } from './modules/purchasing/suppliers.router.js';
 import { salesRouter } from './modules/sales/sales.router.js';
@@ -59,6 +61,8 @@ export function createApp() {
   app.use('/api/suppliers', suppliersRouter);
   app.use('/api/purchases', purchasesRouter);
   app.use('/api/expenses', expensesRouter);
+  app.use('/api/reports', reportsRouter);
+  app.use('/api/notifications', notificationsRouter);
   app.use('/api/platform', platformRouter);
 
   app.use(notFoundHandler);

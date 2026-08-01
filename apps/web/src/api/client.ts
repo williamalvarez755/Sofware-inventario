@@ -96,6 +96,26 @@ export async function restoreSession(): Promise<boolean> {
   return tryRefresh();
 }
 
+/**
+ * Descarga un CSV autenticado: fetch con Bearer → blob → click sintético.
+ * Un <a href> directo no sirve porque el token va en la cabecera, no en la URL
+ * (y meterlo en la URL lo dejaría en logs e historial).
+ */
+export async function downloadCsv(path: string, filename: string): Promise<void> {
+  let res = await rawRequest(path);
+  if (res.status === 401 && (await tryRefresh())) res = await rawRequest(path);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, body?.error?.code ?? 'UNKNOWN', body?.error?.message ?? 'Error al exportar');
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function logoutRequest(): Promise<void> {
   const refreshToken = localStorage.getItem(REFRESH_KEY);
   if (refreshToken) {

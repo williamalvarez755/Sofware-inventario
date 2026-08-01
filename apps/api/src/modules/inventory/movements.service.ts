@@ -13,8 +13,17 @@ import { Prisma } from '@prisma/client';
 import type { MovementType } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 import { AppError } from '../../lib/errors.js';
+import { evaluateStockAlert } from './alerts.js';
 
 type Tx = Prisma.TransactionClient;
+
+/** Fila de store_products tras el UPDATE: lo que necesitan kardex y alertas. */
+interface StockRow {
+  id: string;
+  stock_qty: Prisma.Decimal;
+  avg_cost: bigint;
+  min_stock: Prisma.Decimal;
+}
 
 export interface MovementResult {
   movementId: string;
@@ -94,13 +103,13 @@ export async function applyMovement(
   const qty = toDecimalString(input.signedQty);
   const allowNegative = input.allowNegative ?? false;
 
-  const rows = await tx.$queryRaw<{ stock_qty: Prisma.Decimal; avg_cost: bigint }[]>`
+  const rows = await tx.$queryRaw<StockRow[]>`
     UPDATE store_products
     SET stock_qty = stock_qty + ${qty}::numeric, updated_at = now()
     WHERE store_id = ${input.storeId}::uuid
       AND product_id = ${input.productId}::uuid
       AND (${allowNegative} OR stock_qty + ${qty}::numeric >= 0)
-    RETURNING stock_qty, avg_cost`;
+    RETURNING id, stock_qty, avg_cost, min_stock`;
 
   const row = rows[0];
   if (!row) {
@@ -119,6 +128,13 @@ export async function applyMovement(
     refType: input.refType,
     refId: input.refId,
     note: input.note,
+  });
+  await evaluateStockAlert(tx, tenantId, {
+    storeProductId: row.id,
+    storeId: input.storeId,
+    productId: input.productId,
+    stockQty: Number(row.stock_qty),
+    minStock: Number(row.min_stock),
   });
   return { movementId, balanceAfter, unitCost: row.avg_cost };
 }
@@ -164,13 +180,14 @@ export async function applyCostedEntry(
       ? Math.round(inCost)
       : Math.round((prevStock * prevCost + inQty * inCost) / (prevStock + inQty));
 
-  const updated = await tx.$queryRaw<{ stock_qty: Prisma.Decimal }[]>`
+  const updated = await tx.$queryRaw<StockRow[]>`
     UPDATE store_products
     SET stock_qty = stock_qty + ${qty}::numeric, avg_cost = ${newAvg}, updated_at = now()
     WHERE store_id = ${input.storeId}::uuid AND product_id = ${input.productId}::uuid
-    RETURNING stock_qty`;
+    RETURNING id, stock_qty, avg_cost, min_stock`;
 
-  const balanceAfter = updated[0]!.stock_qty.toFixed(3);
+  const updatedRow = updated[0]!;
+  const balanceAfter = updatedRow.stock_qty.toFixed(3);
   const movementId = await insertMovement(tx, {
     tenantId,
     storeId: input.storeId,
@@ -183,6 +200,13 @@ export async function applyCostedEntry(
     refType: input.refType,
     refId: input.refId,
     note: input.note,
+  });
+  await evaluateStockAlert(tx, tenantId, {
+    storeProductId: updatedRow.id,
+    storeId: input.storeId,
+    productId: input.productId,
+    stockQty: Number(updatedRow.stock_qty),
+    minStock: Number(updatedRow.min_stock),
   });
   return { movementId, balanceAfter, unitCost: input.unitCost };
 }
@@ -236,13 +260,14 @@ export async function applyCostedExit(
           Math.round((prevStock * prevCost - outQty * Number(input.unitCost)) / newStock),
         );
 
-  const updated = await tx.$queryRaw<{ stock_qty: Prisma.Decimal }[]>`
+  const updated = await tx.$queryRaw<StockRow[]>`
     UPDATE store_products
     SET stock_qty = stock_qty - ${qty}::numeric, avg_cost = ${newAvg}, updated_at = now()
     WHERE store_id = ${input.storeId}::uuid AND product_id = ${input.productId}::uuid
-    RETURNING stock_qty`;
+    RETURNING id, stock_qty, avg_cost, min_stock`;
 
-  const balanceAfter = updated[0]!.stock_qty.toFixed(3);
+  const updatedRow = updated[0]!;
+  const balanceAfter = updatedRow.stock_qty.toFixed(3);
   const movementId = await insertMovement(tx, {
     tenantId,
     storeId: input.storeId,
@@ -255,6 +280,13 @@ export async function applyCostedExit(
     refType: input.refType,
     refId: input.refId,
     note: input.note,
+  });
+  await evaluateStockAlert(tx, tenantId, {
+    storeProductId: updatedRow.id,
+    storeId: input.storeId,
+    productId: input.productId,
+    stockQty: Number(updatedRow.stock_qty),
+    minStock: Number(updatedRow.min_stock),
   });
   return { movementId, balanceAfter, unitCost: input.unitCost };
 }

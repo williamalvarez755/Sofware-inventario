@@ -296,7 +296,8 @@ model StoreProduct {
   isActive      Boolean  @default(true) @map("is_active")
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  alerts  StockAlert[]
 
   @@unique([storeId, productId])
   @@index([storeId])
@@ -629,6 +630,63 @@ model Expense {
 
   @@index([storeId, expensedAt(sort: Desc)])
   @@map("expenses")
+}
+
+// ──────────────── Alertas, notificaciones y agregados (Fase 4) ────────────────
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+}
+
+// Episodios de stock bajo: una sola alerta ACTIVE por store_product (índice
+// parcial en la migración); se resuelve sola al recuperarse el stock.
+model StockAlert {
+  id             String      @id @db.Uuid
+  tenantId       String      @map("tenant_id") @db.Uuid
+  storeProductId String      @map("store_product_id") @db.Uuid
+  status         AlertStatus @default(ACTIVE)
+  triggeredAt    DateTime    @default(now()) @map("triggered_at") @db.Timestamptz()
+  resolvedAt     DateTime?   @map("resolved_at") @db.Timestamptz()
+
+  storeProduct StoreProduct @relation(fields: [storeProductId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("stock_alerts")
+}
+
+model Notification {
+  id        String    @id @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String // 'STOCK_LOW', 'CASH_DIFFERENCE', ...
+  title     String
+  body      String?
+  data      Json      @default("{}")
+  readAt    DateTime? @map("read_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// Agregados diarios por tienda (dashboard instantáneo). Se refrescan de forma
+// idempotente al consultar el rango — no requiere scheduler (D-020).
+model DailyStoreStat {
+  tenantId       String   @map("tenant_id") @db.Uuid
+  storeId        String   @map("store_id") @db.Uuid
+  day            DateTime @db.Date
+  salesCount     Int      @default(0) @map("sales_count")
+  salesTotal     BigInt   @default(0) @map("sales_total")
+  costTotal      BigInt   @default(0) @map("cost_total")
+  profitTotal    BigInt   @default(0) @map("profit_total")
+  voidedCount    Int      @default(0) @map("voided_count")
+  expensesTotal  BigInt   @default(0) @map("expenses_total")
+  purchasesTotal BigInt   @default(0) @map("purchases_total")
+
+  @@id([storeId, day])
+  @@index([tenantId, day])
+  @@map("daily_store_stats")
 }
 
 // ─────────────────────────── Auditoría ───────────────────────────
