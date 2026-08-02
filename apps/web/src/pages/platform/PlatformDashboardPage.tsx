@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { formatQ, toCentavos } from '@minimarket/shared';
 import { ApiError, startImpersonation } from '../../api/client';
 import { platformApi, platformLogout } from '../../api/platformClient';
-import { Icon } from '../../components/Icon';
+import { Marca } from '../../components/Marca';
 import { ThemePicker } from '../../components/ThemePicker';
 import {
   Badge, Button, Cell, Empty, Field, IconButton, Modal, Notice, Panel,
@@ -81,11 +81,12 @@ export function PlatformDashboardPage() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[hsl(var(--bg)/0.72)] backdrop-blur-2xl">
         <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-5 py-3">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent))]">
-            <Icon name="escudo" size={18} />
-          </span>
-          <span className="font-display text-sm font-semibold text-[hsl(var(--text-1))]">
-            MiniMarket · Plataforma
+          <Marca size={32} />
+          <span className="font-display text-[15px] font-semibold text-[hsl(var(--text-1))]">
+            MiniMarket
+            <span className="ml-2 rounded-md bg-[hsl(var(--accent)/0.16)] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--accent-strong))]">
+              Plataforma
+            </span>
           </span>
           <div className="ml-auto flex items-center gap-1">
             <ThemePicker />
@@ -111,30 +112,60 @@ export function PlatformDashboardPage() {
 
         {metrics && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* La cifra que define el negocio SaaS va primero y sola. */}
+            <Panel className="relative overflow-hidden p-6">
+              <div
+                className="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full opacity-[0.16] blur-3xl"
+                style={{ background: 'hsl(var(--accent))' }}
+                aria-hidden
+              />
+              <div className="relative flex flex-wrap items-end justify-between gap-6">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
+                    Ingreso mensual recurrente
+                  </p>
+                  <p className="money mt-2 text-[46px] font-bold leading-none text-[hsl(var(--accent-strong))] sm:text-[56px]">
+                    {formatQ(BigInt(metrics.revenue.mrr))}
+                  </p>
+                  <p className="mt-2.5 text-sm text-[hsl(var(--text-2))]">
+                    {metrics.revenue.payingTenants} cliente(s) de pago ·{' '}
+                    <span className="text-[hsl(var(--text-3))]">
+                      {metrics.tenants.active} activos de {metrics.tenants.total}
+                    </span>
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
+                    Volumen transado (30 d)
+                  </p>
+                  <p className="money mt-1 text-[28px] font-bold leading-none text-[hsl(var(--text-1))]">
+                    {formatQ(BigInt(metrics.volume.volume30d))}
+                  </p>
+                  <p className="mt-1 text-xs text-[hsl(var(--text-3))]">
+                    {metrics.volume.sales30d} ventas · {metrics.volume.salesToday} hoy
+                  </p>
+                </div>
+              </div>
+            </Panel>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Stat
                 label="Clientes activos"
                 value={String(metrics.tenants.active)}
-                hint={`${metrics.tenants.suspended} suspendido(s) · ${metrics.tenants.total} total`}
+                hint={`${metrics.tenants.suspended} suspendido(s)`}
                 icon="tienda"
+                tone={metrics.tenants.suspended > 0 ? 'danger' : 'neutral'}
               />
               <Stat
-                label="Ingreso mensual"
-                value={formatQ(BigInt(metrics.revenue.mrr))}
-                hint={`${metrics.revenue.payingTenants} de pago`}
-                tone="accent"
-                icon="reportes"
-              />
-              <Stat
-                label="Volumen transado (30 d)"
-                value={formatQ(BigInt(metrics.volume.volume30d))}
-                hint={`${metrics.volume.sales30d} ventas · ${metrics.volume.salesToday} hoy`}
+                label="Tiendas"
+                value={String(metrics.scale.stores)}
+                hint={`${metrics.scale.users} usuarios activos`}
                 icon="punto-venta"
               />
               <Stat
-                label="Escala"
-                value={`${metrics.scale.stores} tiendas`}
-                hint={`${metrics.scale.users} usuarios · ${metrics.scale.products} productos`}
+                label="Catálogo"
+                value={String(metrics.scale.products)}
+                hint="productos en la plataforma"
                 icon="productos"
               />
             </div>

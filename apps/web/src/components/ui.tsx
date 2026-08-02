@@ -450,41 +450,93 @@ export function Empty({ children, icon }: { children: ReactNode; icon?: IconName
 
 // ─────────────────────────────── Indicadores ───────────────────────────────
 
+/**
+ * Tarjeta de indicador. El icono va en una pastilla del color del dato —no
+ * suelto en una esquina— para que la tarjeta se lea como una unidad y no como
+ * texto con un adorno. `spark` dibuja la tendencia detrás del número: da
+ * contexto sin ocupar espacio ni pedir otro gráfico.
+ */
 export function Stat({
   label,
   value,
   hint,
   tone = 'neutral',
   icon,
+  spark,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: 'neutral' | 'accent' | 'danger';
   icon?: IconName;
+  spark?: number[];
 }) {
+  const color =
+    tone === 'accent'
+      ? 'text-[hsl(var(--accent-strong))]'
+      : tone === 'danger'
+        ? 'text-red-400'
+        : 'text-[hsl(var(--text-1))]';
+  const pastilla =
+    tone === 'accent'
+      ? 'bg-[hsl(var(--accent)/0.16)] text-[hsl(var(--accent-strong))]'
+      : tone === 'danger'
+        ? 'bg-red-500/12 text-red-400'
+        : 'bg-white/[0.06] text-[hsl(var(--text-2))]';
+
   return (
-    <Panel className="p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]">
-          {label}
-        </p>
-        {icon && <Icon name={icon} size={15} className="text-[hsl(var(--text-3))]" />}
-      </div>
-      <p
-        className={cx(
-          'money mt-1.5 text-[26px] font-semibold leading-none',
-          tone === 'accent'
-            ? 'text-[hsl(var(--accent-strong))]'
-            : tone === 'danger'
-              ? 'text-red-400'
-              : 'text-[hsl(var(--text-1))]',
+    <Panel className="group relative overflow-hidden p-4">
+      {spark && spark.length > 1 && <Sparkline points={spark} tone={tone} />}
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
+            {label}
+          </p>
+          <p className={cx('money mt-2 text-[27px] font-bold leading-none', color)}>{value}</p>
+          {hint && <p className="mt-2 text-xs text-[hsl(var(--text-3))]">{hint}</p>}
+        </div>
+        {icon && (
+          <span
+            className={cx(
+              'flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105',
+              pastilla,
+            )}
+          >
+            <Icon name={icon} size={18} />
+          </span>
         )}
-      >
-        {value}
-      </p>
-      {hint && <p className="mt-1.5 text-xs text-[hsl(var(--text-3))]">{hint}</p>}
+      </div>
     </Panel>
+  );
+}
+
+/** Tendencia de fondo: área suave, sin ejes ni etiquetas — es contexto, no dato. */
+function Sparkline({ points, tone }: { points: number[]; tone: 'neutral' | 'accent' | 'danger' }) {
+  const max = Math.max(...points, 1);
+  const W = 100;
+  const H = 30;
+  const step = points.length > 1 ? W / (points.length - 1) : W;
+  const coords = points.map((p, i) => `${i * step},${H - (p / max) * H}`);
+  const stroke =
+    tone === 'danger' ? 'rgb(248 113 113)' : 'hsl(var(--accent))';
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-[0.22]"
+      aria-hidden
+    >
+      <polygon points={`0,${H} ${coords.join(' ')} ${W},${H}`} fill={stroke} opacity="0.35" />
+      <polyline
+        points={coords.join(' ')}
+        fill="none"
+        stroke={stroke}
+        strokeWidth="1.6"
+        vectorEffect="non-scaling-stroke"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

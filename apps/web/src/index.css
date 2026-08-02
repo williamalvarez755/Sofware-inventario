@@ -10,9 +10,13 @@
    ============================================================================ */
 
 @theme {
-  --font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
-  --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* Outfit para títulos: geométrica, de remates redondeados, amable.
+     Manrope para todo lo demás, incluidas las cifras: sus números son anchos
+     y legibles, y evitan el aire de máquina de escribir que da una
+     monoespaciada cuando lo que se lee todo el día son precios. */
+  --font-display: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Manrope', 'Segoe UI', system-ui, sans-serif;
 
   --color-bg: hsl(var(--bg));
   --color-bg-deep: hsl(var(--bg-deep));
@@ -57,7 +61,6 @@ body {
   background-color: hsl(var(--bg));
   color: hsl(var(--text-1));
   font-family: var(--font-sans);
-  font-feature-settings: 'cv05' 1, 'ss01' 1;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -134,15 +137,18 @@ body::after {
 /* --- Tipografía ----------------------------------------------------------- */
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.022em;
+  letter-spacing: -0.018em;
 }
 
-/* El dinero SIEMPRE en cifras tabulares: las columnas se alinean y el ojo
-   compara montos sin releer. */
-.money {
-  font-family: var(--font-mono);
+/* El dinero SIEMPRE en cifras tabulares: las columnas se alinean solas y el
+   ojo compara montos sin releer. Se logra con la misma familia del texto —no
+   con una monoespaciada— para que un precio se lea como parte de la interfaz
+   y no como la salida de una terminal. */
+.money,
+.cifras {
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  font-feature-settings: 'tnum' 1, 'ss01' 1;
+  letter-spacing: -0.012em;
 }
 
 /* --- Foco visible y consistente ------------------------------------------ */

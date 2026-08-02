@@ -1,43 +1,48 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth, type LoginOutcome } from '../auth/AuthContext';
 import { Icon } from '../components/Icon';
+import { Marca } from '../components/Marca';
 import { ThemePicker } from '../components/ThemePicker';
 import { Button, Field, Notice, Panel } from '../components/ui';
 
+/**
+ * Acceso ÚNICO (D-041): el mismo formulario sirve al tendero y al super
+ * admin. El servidor resuelve de qué tipo es la cuenta y la aplicación lleva
+ * a cada quien a su lugar — nadie tiene que saber que existen dos puertas.
+ */
 export function LoginPage() {
   const { login, completeTwoFactor } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  /** Presente cuando el usuario tiene verificación en dos pasos activa. */
   const [challenge, setChallenge] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  function encaminar(outcome: LoginOutcome) {
+    if (outcome.kind === 'segundo-factor') {
+      setChallenge(outcome.challengeToken);
+      setCode('');
+      return;
+    }
+    navigate(outcome.kind === 'plataforma' ? '/plataforma' : '/', { replace: true });
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      if (challenge) {
-        await completeTwoFactor(challenge, code);
-        navigate('/', { replace: true });
-        return;
-      }
-      const outcome = await login(username.trim(), password);
-      if (outcome.kind === 'segundo-factor') {
-        setChallenge(outcome.challengeToken);
-        setCode('');
-      } else {
-        navigate('/', { replace: true });
-      }
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'No se pudo conectar con el servidor',
+      encaminar(
+        challenge
+          ? await completeTwoFactor(challenge, code)
+          : await login(username.trim(), password),
       );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo conectar con el servidor');
     } finally {
       setBusy(false);
     }
@@ -50,15 +55,12 @@ export function LoginPage() {
       </div>
 
       <div className="surgir w-full max-w-[26rem]">
-        {/* Marca: la caja registradora dentro de un cuadro de vidrio. */}
-        <div className="mb-7 flex flex-col items-center text-center">
-          <span className="glass mb-4 flex size-14 items-center justify-center rounded-2xl text-[hsl(var(--accent))]">
-            <Icon name="caja" size={26} />
-          </span>
-          <h1 className="font-display text-[26px] font-semibold tracking-tight text-[hsl(var(--text-1))]">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Marca size={60} className="mb-5" />
+          <h1 className="font-display text-[30px] font-semibold tracking-tight text-[hsl(var(--text-1))]">
             MiniMarket
           </h1>
-          <p className="mt-1 text-sm text-[hsl(var(--text-3))]">
+          <p className="mt-1.5 text-[15px] text-[hsl(var(--text-3))]">
             Punto de venta, inventario y caja
           </p>
         </div>
@@ -66,15 +68,15 @@ export function LoginPage() {
         <Panel as="form" className="p-6" onSubmit={onSubmit}>
           {challenge ? (
             <>
-              <div className="mb-4 flex items-center gap-3">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent-strong))]">
-                  <Icon name="escudo" size={20} />
+              <div className="mb-5 flex items-center gap-3">
+                <span className="flex size-11 items-center justify-center rounded-2xl bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent))]">
+                  <Icon name="escudo" size={22} />
                 </span>
                 <div>
                   <h2 className="font-display text-base font-semibold text-[hsl(var(--text-1))]">
                     Verificación en dos pasos
                   </h2>
-                  <p className="text-xs text-[hsl(var(--text-3))]">
+                  <p className="text-[13px] text-[hsl(var(--text-3))]">
                     Escriba el código de su aplicación
                   </p>
                 </div>
@@ -88,7 +90,7 @@ export function LoginPage() {
                 placeholder="000000"
                 autoFocus
                 required
-                className="money"
+                className="cifras"
                 hint="También sirve uno de sus códigos de recuperación."
               />
             </>
@@ -153,16 +155,6 @@ export function LoginPage() {
             </Button>
           )}
         </Panel>
-
-        <p className="mt-6 text-center text-xs text-[hsl(var(--text-3))]">
-          ¿Administra la plataforma?{' '}
-          <a
-            href="/plataforma/login"
-            className="font-medium text-[hsl(var(--accent-strong))] hover:underline"
-          >
-            Entrar como super admin
-          </a>
-        </p>
       </div>
     </div>
   );

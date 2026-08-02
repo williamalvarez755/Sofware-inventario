@@ -10,7 +10,7 @@ import { validate } from '../../middleware/validate.js';
 import { unauthorized } from '../../lib/errors.js';
 import {
   completeTwoFactorLogin,
-  loginTenantUser,
+  login,
   revokeSession,
   rotateRefreshToken,
 } from './auth.service.js';
@@ -25,7 +25,8 @@ authRouter.post(
   passwordAttemptLimiter,
   validate(loginSchema),
   async (req, res) => {
-    res.json(await loginTenantUser(req.body.identifier, req.body.password, req));
+    // Ingreso unificado: resuelve si es cuenta de tienda o de plataforma.
+    res.json(await login(req.body.identifier, req.body.password, req));
   },
 );
 

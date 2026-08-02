@@ -1,9 +1,11 @@
 /**
- * Juego de iconos propio: trazo de 1.6 px sobre rejilla de 24, sin relleno.
- * Se dibujan a mano —en vez de traer una librería— para que todos compartan
- * el mismo peso óptico y hereden `currentColor`; una mezcla de sets se nota
- * enseguida y es justo lo que hace que una interfaz parezca ensamblada.
- * Ningún emoji: en Windows se ven de un color que ningún tema puede corregir.
+ * Juego de iconos propio, en estilo DÚOTONO: cada icono lleva una silueta
+ * rellena al 18 % y encima el trazo. Esa segunda capa es lo que los separa de
+ * un pictograma de línea genérico — da volumen, los hace verse más cálidos y
+ * mantiene la legibilidad a 16 px, que es el tamaño de la barra.
+ *
+ * Todo hereda `currentColor`, así que siguen al tema. Ningún emoji: en Windows
+ * se pintan con su propia paleta y ningún tema puede corregirlos.
  */
 
 export type IconName =
@@ -37,205 +39,309 @@ export type IconName =
   | 'editar'
   | 'tienda';
 
-const PATHS: Record<IconName, React.ReactNode> = {
-  inicio: (
-    <>
-      <path d="M3 10.2 12 3l9 7.2" />
-      <path d="M5 9.5V20h14V9.5" />
-      <path d="M9.5 20v-6h5v6" />
-    </>
-  ),
-  'punto-venta': (
-    <>
-      <rect x="3" y="4" width="18" height="12" rx="2" />
-      <path d="M7 20h10" />
-      <path d="M7 8h6M7 11.5h3" />
-    </>
-  ),
-  caja: (
-    <>
-      <rect x="2.5" y="6" width="19" height="12" rx="2" />
-      <circle cx="12" cy="12" r="2.5" />
-      <path d="M6 9.5v5M18 9.5v5" />
-    </>
-  ),
-  productos: (
-    <>
-      <path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z" />
-      <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
-    </>
-  ),
-  compras: (
-    <>
-      <path d="M3 5h2.2l2.3 10.5h9.8L19 8H6.2" />
-      <circle cx="9" cy="19" r="1.4" />
-      <circle cx="17" cy="19" r="1.4" />
-    </>
-  ),
-  gastos: (
-    <>
-      <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
-      <path d="M2.5 10h19" />
-      <path d="M6 14.5h4" />
-    </>
-  ),
-  proveedores: (
-    <>
-      <path d="M2.5 16V8.5h10V16z" />
-      <path d="M12.5 11h4l3 3v2h-7z" />
-      <circle cx="6.5" cy="18" r="1.6" />
-      <circle cx="16.5" cy="18" r="1.6" />
-    </>
-  ),
-  reportes: (
-    <>
-      <path d="M4 20V4" />
-      <path d="M4 20h16" />
-      <path d="M8 16.5V12M12.5 16.5V7.5M17 16.5v-6" />
-    </>
-  ),
-  campana: (
-    <>
-      <path d="M6.5 10a5.5 5.5 0 0 1 11 0c0 4 1.5 5.5 1.5 5.5H5s1.5-1.5 1.5-5.5" />
-      <path d="M10 18.5a2.2 2.2 0 0 0 4 0" />
-    </>
-  ),
-  salir: (
-    <>
-      <path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14" />
-      <path d="M10 8 6 12l4 4" />
-      <path d="M6 12h9" />
-    </>
-  ),
-  ajustes: (
-    <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4 5.3 5.3" />
-    </>
-  ),
-  usuario: (
-    <>
-      <circle cx="12" cy="8.5" r="3.8" />
-      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-    </>
-  ),
-  candado: (
-    <>
-      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
-      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
-    </>
-  ),
-  camara: (
-    <>
-      <path d="M3 8.5h3.5L8 6h8l1.5 2.5H21v10H3z" />
-      <circle cx="12" cy="13" r="3.2" />
-    </>
-  ),
-  imprimir: (
-    <>
-      <path d="M7 9V3.5h10V9" />
-      <rect x="3.5" y="9" width="17" height="7.5" rx="1.5" />
-      <path d="M7 14h10v6.5H7z" />
-    </>
-  ),
-  buscar: (
-    <>
-      <circle cx="10.5" cy="10.5" r="6.5" />
-      <path d="m15.5 15.5 4.5 4.5" />
-    </>
-  ),
-  mas: <path d="M12 5v14M5 12h14" />,
-  menos: <path d="M5 12h14" />,
-  cerrar: <path d="m6 6 12 12M18 6 6 18" />,
-  cheque: <path d="m4.5 12.5 5 5 10-11" />,
-  alerta: (
-    <>
-      <path d="M12 3.5 2.5 20h19z" />
-      <path d="M12 10v4.5M12 17.4v.1" />
-    </>
-  ),
-  'flecha-derecha': (
-    <>
-      <path d="M4 12h15" />
-      <path d="m13.5 6.5 5.5 5.5-5.5 5.5" />
-    </>
-  ),
-  descargar: (
-    <>
-      <path d="M12 3.5v11" />
-      <path d="m7.5 10 4.5 4.5L16.5 10" />
-      <path d="M4.5 19.5h15" />
-    </>
-  ),
-  escudo: (
-    <>
-      <path d="M12 3 5 5.8v5.4c0 4.4 2.9 8.1 7 9.3 4.1-1.2 7-4.9 7-9.3V5.8z" />
-      <path d="m9 12 2.2 2.2L15.3 10" />
-    </>
-  ),
-  'sin-conexion': (
-    <>
-      <path d="M3 4.5 21 20" />
-      <path d="M2.5 9.2a15 15 0 0 1 5-3.1M16.4 6.4a15 15 0 0 1 5.1 2.8" />
-      <path d="M6.2 13a10 10 0 0 1 2.6-1.6M15 11.2a10 10 0 0 1 2.8 1.8" />
-      <path d="M9.6 16.6a5 5 0 0 1 4.8 0" />
-      <path d="M12 20v.1" />
-    </>
-  ),
-  ojo: (
-    <>
-      <path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6" />
-      <circle cx="12" cy="12" r="2.8" />
-    </>
-  ),
-  basura: (
-    <>
-      <path d="M4.5 7h15" />
-      <path d="M9.5 7V4.5h5V7" />
-      <path d="M6.5 7v12.5a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5V7" />
-      <path d="M10.5 11v6M13.5 11v6" />
-    </>
-  ),
-  editar: (
-    <>
-      <path d="M4 20h4L19 9l-4-4L4 16z" />
-      <path d="m14.5 5.5 4 4" />
-    </>
-  ),
-  tienda: (
-    <>
-      <path d="M4 10v10h16V10" />
-      <path d="M2.5 10 5 4h14l2.5 6a3 3 0 0 1-5.5 1.6A3 3 0 0 1 12 11.6a3 3 0 0 1-4 0A3 3 0 0 1 2.5 10Z" />
-    </>
-  ),
+interface Glifo {
+  /** Silueta de fondo, rellena y suave. */
+  fondo?: React.ReactNode;
+  /** Trazo principal. */
+  trazo: React.ReactNode;
+}
+
+const GLIFOS: Record<IconName, Glifo> = {
+  inicio: {
+    fondo: <path d="M12 3.4 20 9.6V19a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 19V9.6L12 3.4Z" />,
+    trazo: (
+      <>
+        <path d="M3.2 10.4 12 3.4l8.8 7" />
+        <path d="M5.4 9.2V19a1.6 1.6 0 0 0 1.6 1.6h10a1.6 1.6 0 0 0 1.6-1.6V9.2" />
+        <path d="M9.6 20.6v-5.4a1.4 1.4 0 0 1 1.4-1.4h2a1.4 1.4 0 0 1 1.4 1.4v5.4" />
+      </>
+    ),
+  },
+  'punto-venta': {
+    fondo: <rect x="3.2" y="4.2" width="17.6" height="12" rx="2.6" />,
+    trazo: (
+      <>
+        <rect x="3.2" y="4.2" width="17.6" height="12" rx="2.6" />
+        <path d="M7.4 20.4h9.2" />
+        <path d="M12 16.2v4.2" />
+        <path d="M7 8.6h6.4M7 11.8h3.6" />
+      </>
+    ),
+  },
+  caja: {
+    fondo: <rect x="2.6" y="6.4" width="18.8" height="11.6" rx="2.8" />,
+    trazo: (
+      <>
+        <rect x="2.6" y="6.4" width="18.8" height="11.6" rx="2.8" />
+        <circle cx="12" cy="12.2" r="2.7" />
+        <path d="M6.2 10v4.4M17.8 10v4.4" />
+      </>
+    ),
+  },
+  productos: {
+    fondo: <path d="M12 3.2 20.4 7.6v8.8L12 20.8 3.6 16.4V7.6L12 3.2Z" />,
+    trazo: (
+      <>
+        <path d="M3.6 7.6 12 3.2l8.4 4.4v8.8L12 20.8l-8.4-4.4V7.6Z" />
+        <path d="m3.6 7.6 8.4 4.4 8.4-4.4M12 12v8.8" />
+      </>
+    ),
+  },
+  compras: {
+    fondo: <path d="M7 8.4h12.4l-1.7 7.4a1.6 1.6 0 0 1-1.6 1.2H9.6a1.6 1.6 0 0 1-1.5-1.2L7 8.4Z" />,
+    trazo: (
+      <>
+        <path d="M2.8 4.4h2.1a1 1 0 0 1 1 .8l2.2 10.4a1.6 1.6 0 0 0 1.5 1.2h6.8a1.6 1.6 0 0 0 1.6-1.2l1.4-6.2a.9.9 0 0 0-.9-1.1H6.4" />
+        <circle cx="10" cy="20" r="1.5" />
+        <circle cx="17" cy="20" r="1.5" />
+      </>
+    ),
+  },
+  gastos: {
+    fondo: <rect x="2.6" y="5.6" width="18.8" height="12.8" rx="2.6" />,
+    trazo: (
+      <>
+        <rect x="2.6" y="5.6" width="18.8" height="12.8" rx="2.6" />
+        <path d="M2.6 10.2h18.8" />
+        <path d="M6.2 14.6h4" />
+      </>
+    ),
+  },
+  proveedores: {
+    fondo: <path d="M2.6 8.4h9.8v8H2.6z" />,
+    trazo: (
+      <>
+        <path d="M2.6 16.4v-6.6a1.4 1.4 0 0 1 1.4-1.4h8.4v8" />
+        <path d="M12.4 11.2h3.7a1.4 1.4 0 0 1 1.1.5l2.6 3a1.4 1.4 0 0 1 .3.9v.8h-7.7" />
+        <circle cx="6.6" cy="18" r="1.6" />
+        <circle cx="16.6" cy="18" r="1.6" />
+      </>
+    ),
+  },
+  reportes: {
+    fondo: (
+      <>
+        <rect x="6.8" y="11.4" width="3" height="5.6" rx="1.2" />
+        <rect x="14.2" y="8.6" width="3" height="8.4" rx="1.2" />
+      </>
+    ),
+    trazo: (
+      <>
+        <path d="M4 3.6V19a1.4 1.4 0 0 0 1.4 1.4H20" />
+        <path d="M8.3 17v-5.6M12 17V9.4M15.7 17V7" />
+      </>
+    ),
+  },
+  campana: {
+    fondo: <path d="M6.6 10.4a5.4 5.4 0 0 1 10.8 0c0 3.4 1.2 5 1.2 5H5.4s1.2-1.6 1.2-5Z" />,
+    trazo: (
+      <>
+        <path d="M6.6 10.4a5.4 5.4 0 0 1 10.8 0c0 3.4 1.2 5 1.2 5H5.4s1.2-1.6 1.2-5Z" />
+        <path d="M9.9 18.4a2.2 2.2 0 0 0 4.2 0" />
+      </>
+    ),
+  },
+  salir: {
+    fondo: <path d="M13.6 3.6h4.2A2.2 2.2 0 0 1 20 5.8v12.4a2.2 2.2 0 0 1-2.2 2.2h-4.2v-17Z" />,
+    trazo: (
+      <>
+        <path d="M13.6 3.6h4.2A2.2 2.2 0 0 1 20 5.8v12.4a2.2 2.2 0 0 1-2.2 2.2h-4.2" />
+        <path d="m9.4 8.2-3.8 3.8 3.8 3.8" />
+        <path d="M5.6 12h8.4" />
+      </>
+    ),
+  },
+  ajustes: {
+    fondo: <circle cx="12" cy="12" r="3.4" />,
+    trazo: (
+      <>
+        <circle cx="12" cy="12" r="3.4" />
+        <path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5" />
+      </>
+    ),
+  },
+  usuario: {
+    fondo: (
+      <>
+        <circle cx="12" cy="8.4" r="3.8" />
+        <path d="M4.6 20.4a7.4 7.4 0 0 1 14.8 0H4.6Z" />
+      </>
+    ),
+    trazo: (
+      <>
+        <circle cx="12" cy="8.4" r="3.8" />
+        <path d="M4.6 20.4a7.4 7.4 0 0 1 14.8 0" />
+      </>
+    ),
+  },
+  candado: {
+    fondo: <rect x="4.4" y="10.4" width="15.2" height="10.2" rx="2.6" />,
+    trazo: (
+      <>
+        <rect x="4.4" y="10.4" width="15.2" height="10.2" rx="2.6" />
+        <path d="M8 10.4V7.6a4 4 0 0 1 8 0v2.8" />
+        <path d="M12 14.6v2" />
+      </>
+    ),
+  },
+  camara: {
+    fondo: <path d="M3 8.8h3.6L8.2 6h7.6l1.6 2.8H21v9.4H3V8.8Z" />,
+    trazo: (
+      <>
+        <path d="M3 18.2V8.8h3.6L8.2 6h7.6l1.6 2.8H21v9.4a1.4 1.4 0 0 1-1.4 1.4H4.4A1.4 1.4 0 0 1 3 18.2Z" />
+        <circle cx="12" cy="13.2" r="3.3" />
+      </>
+    ),
+  },
+  imprimir: {
+    fondo: <rect x="3.4" y="9" width="17.2" height="7.6" rx="2" />,
+    trazo: (
+      <>
+        <path d="M7 9V4.4a.8.8 0 0 1 .8-.8h8.4a.8.8 0 0 1 .8.8V9" />
+        <rect x="3.4" y="9" width="17.2" height="7.6" rx="2" />
+        <path d="M7 13.6h10v6.2a.8.8 0 0 1-.8.8H7.8a.8.8 0 0 1-.8-.8v-6.2Z" />
+      </>
+    ),
+  },
+  buscar: {
+    fondo: <circle cx="10.6" cy="10.6" r="6.4" />,
+    trazo: (
+      <>
+        <circle cx="10.6" cy="10.6" r="6.4" />
+        <path d="m15.4 15.4 4.4 4.4" />
+      </>
+    ),
+  },
+  mas: { trazo: <path d="M12 5.4v13.2M5.4 12h13.2" /> },
+  menos: { trazo: <path d="M5.4 12h13.2" /> },
+  cerrar: { trazo: <path d="m6.4 6.4 11.2 11.2M17.6 6.4 6.4 17.6" /> },
+  cheque: {
+    fondo: <circle cx="12" cy="12" r="9" />,
+    trazo: <path d="m7.6 12.3 3 3 5.8-6.6" />,
+  },
+  alerta: {
+    fondo: <path d="M10.7 3.9 2.9 18.2a1.5 1.5 0 0 0 1.3 2.3h15.6a1.5 1.5 0 0 0 1.3-2.3L13.3 3.9a1.5 1.5 0 0 0-2.6 0Z" />,
+    trazo: (
+      <>
+        <path d="M10.7 3.9 2.9 18.2a1.5 1.5 0 0 0 1.3 2.3h15.6a1.5 1.5 0 0 0 1.3-2.3L13.3 3.9a1.5 1.5 0 0 0-2.6 0Z" />
+        <path d="M12 9.4v4.4M12 17.1v.1" />
+      </>
+    ),
+  },
+  'flecha-derecha': {
+    trazo: (
+      <>
+        <path d="M4.4 12h14.4" />
+        <path d="m13.4 6.6 5.4 5.4-5.4 5.4" />
+      </>
+    ),
+  },
+  descargar: {
+    fondo: <path d="M3.8 15.4v3.4a1.6 1.6 0 0 0 1.6 1.6h13.2a1.6 1.6 0 0 0 1.6-1.6v-3.4H3.8Z" />,
+    trazo: (
+      <>
+        <path d="M12 3.4v11" />
+        <path d="m7.6 10.2 4.4 4.4 4.4-4.4" />
+        <path d="M3.8 16.6v2.2a1.6 1.6 0 0 0 1.6 1.6h13.2a1.6 1.6 0 0 0 1.6-1.6v-2.2" />
+      </>
+    ),
+  },
+  escudo: {
+    fondo: <path d="M12 2.8 4.8 5.6v5.6c0 4.6 3 8.5 7.2 9.9 4.2-1.4 7.2-5.3 7.2-9.9V5.6L12 2.8Z" />,
+    trazo: (
+      <>
+        <path d="M12 2.8 4.8 5.6v5.6c0 4.6 3 8.5 7.2 9.9 4.2-1.4 7.2-5.3 7.2-9.9V5.6L12 2.8Z" />
+        <path d="m9.1 11.9 2.2 2.2 3.9-4.4" />
+      </>
+    ),
+  },
+  'sin-conexion': {
+    trazo: (
+      <>
+        <path d="M3.2 4.4 20.8 19.8" />
+        <path d="M2.4 9a15.4 15.4 0 0 1 4.9-3M16.4 6.2a15.4 15.4 0 0 1 5.2 2.8" />
+        <path d="M6.1 12.9a10 10 0 0 1 2.4-1.5M15.2 11.1a10 10 0 0 1 2.7 1.8" />
+        <path d="M9.5 16.5a5 5 0 0 1 4.6-.1" />
+        <path d="M12 19.9v.1" />
+      </>
+    ),
+  },
+  ojo: {
+    fondo: <path d="M2.6 12S6.2 6.2 12 6.2 21.4 12 21.4 12 17.8 17.8 12 17.8 2.6 12 2.6 12Z" />,
+    trazo: (
+      <>
+        <path d="M2.6 12S6.2 6.2 12 6.2 21.4 12 21.4 12 17.8 17.8 12 17.8 2.6 12 2.6 12Z" />
+        <circle cx="12" cy="12" r="2.9" />
+      </>
+    ),
+  },
+  basura: {
+    fondo: <path d="M6.4 7.4h11.2l-.9 12a1.6 1.6 0 0 1-1.6 1.5H8.9a1.6 1.6 0 0 1-1.6-1.5l-.9-12Z" />,
+    trazo: (
+      <>
+        <path d="M4.4 7.4h15.2" />
+        <path d="M9.6 7.4V5.2a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1v2.2" />
+        <path d="M6.4 7.4h11.2l-.9 12a1.6 1.6 0 0 1-1.6 1.5H8.9a1.6 1.6 0 0 1-1.6-1.5l-.9-12Z" />
+        <path d="M10.6 11.4v5.6M13.4 11.4v5.6" />
+      </>
+    ),
+  },
+  editar: {
+    fondo: <path d="M4 20.2 4.9 16 15.6 5.3l3.1 3.1L8 19.1l-4 1.1Z" />,
+    trazo: (
+      <>
+        <path d="M4 20.2 4.9 16 15.6 5.3a1.5 1.5 0 0 1 2.1 0l1 1a1.5 1.5 0 0 1 0 2.1L8 19.1l-4 1.1Z" />
+        <path d="m14.4 6.6 3.1 3.1" />
+      </>
+    ),
+  },
+  tienda: {
+    fondo: <path d="M4.4 10.6h15.2V19a1.6 1.6 0 0 1-1.6 1.6H6a1.6 1.6 0 0 1-1.6-1.6v-8.4Z" />,
+    trazo: (
+      <>
+        <path d="M4.4 10.6V19a1.6 1.6 0 0 0 1.6 1.6h12a1.6 1.6 0 0 0 1.6-1.6v-8.4" />
+        <path d="M2.8 9.4 5 4.2a1 1 0 0 1 .9-.6h12.2a1 1 0 0 1 .9.6l2.2 5.2a2.6 2.6 0 0 1-4.8 1.4 2.6 2.6 0 0 1-4.4 0 2.6 2.6 0 0 1-4.4 0 2.6 2.6 0 0 1-4.8-1.4Z" />
+        <path d="M10 20.6v-4.8h4v4.8" />
+      </>
+    ),
+  },
 };
 
 export function Icon({
   name,
   size = 20,
   className = '',
-  strokeWidth = 1.6,
+  strokeWidth = 1.7,
 }: {
   name: IconName;
   size?: number;
   className?: string;
   strokeWidth?: number;
 }) {
+  const glifo = GLIFOS[name];
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
       className={className}
       aria-hidden="true"
       focusable="false"
     >
-      {PATHS[name]}
+      {glifo.fondo && (
+        <g fill="currentColor" opacity="0.18" stroke="none">
+          {glifo.fondo}
+        </g>
+      )}
+      <g
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {glifo.trazo}
+      </g>
     </svg>
   );
 }

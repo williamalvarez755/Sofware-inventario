@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { restorePlatformSession } from './api/platformClient';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeProvider';
-import { Icon } from './components/Icon';
+import { Marca } from './components/Marca';
 import { CashPage } from './pages/CashPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ExpensesPage } from './pages/ExpensesPage';
@@ -14,14 +14,11 @@ import { PurchasesPage } from './pages/PurchasesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SuppliersPage } from './pages/SuppliersPage';
 import { PlatformDashboardPage } from './pages/platform/PlatformDashboardPage';
-import { PlatformLoginPage } from './pages/platform/PlatformLoginPage';
 
 function Cargando() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3">
-      <span className="glass flex size-12 animate-pulse items-center justify-center rounded-2xl text-[hsl(var(--accent))]">
-        <Icon name="caja" size={22} />
-      </span>
+      <Marca size={48} className="animate-pulse" />
       <p className="text-sm text-[hsl(var(--text-3))]">Cargando…</p>
     </div>
   );
@@ -61,7 +58,9 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/plataforma/login" element={<PlatformLoginPage />} />
+            {/* El acceso es único (D-041): la antigua puerta de plataforma
+                sigue existiendo como redirección para enlaces guardados. */}
+            <Route path="/plataforma/login" element={<Navigate to="/login" replace />} />
             <Route
               path="/plataforma"
               element={

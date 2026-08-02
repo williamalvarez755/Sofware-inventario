@@ -59,6 +59,32 @@ async function issueTokens(principal: {
   return { accessToken, refreshToken: token };
 }
 
+/**
+ * Ingreso UNIFICADO (D-041): un solo formulario para el tendero y para el
+ * super admin. Si el identificador no corresponde a un usuario de tienda, se
+ * intenta como cuenta de plataforma; la respuesta lleva `scope` para que la
+ * aplicación sepa a dónde llevarlo. Un identificador inexistente y una
+ * contraseña incorrecta siguen dando exactamente el mismo error, así que esto
+ * no permite averiguar qué cuentas existen.
+ */
+export async function login(identifier: string, password: string, req: Request) {
+  const user = await prismaAdmin.user.findFirst({
+    where: { OR: [{ username: identifier }, { email: identifier }] },
+    select: { id: true },
+  });
+  if (user) return loginTenantUser(identifier, password, req);
+
+  const admin = await prismaAdmin.platformUser.findFirst({
+    where: { OR: [{ username: identifier }, { email: identifier }] },
+    select: { id: true },
+  });
+  if (admin) return loginPlatformUser(identifier, password, req);
+
+  // Sin coincidencia: se responde igual que ante una contraseña equivocada.
+  await audit(prismaAdmin, { action: 'auth.login_failed', after: { identifier } }, req);
+  throw unauthorized();
+}
+
 /** `identifier` es el nombre de usuario o, por compatibilidad, el correo. */
 export async function loginTenantUser(identifier: string, password: string, req: Request) {
   const user = await prismaAdmin.user.findFirst({
@@ -99,6 +125,7 @@ export async function loginTenantUser(identifier: string, password: string, req:
       action: 'auth.login_2fa_challenge',
     }, req);
     return {
+      scope: 'tienda' as const,
       requiresTwoFactor: true as const,
       challengeToken: signChallengeToken({ sub: user.id, kind: 'user', ten: user.tenantId }),
     };
@@ -109,6 +136,7 @@ export async function loginTenantUser(identifier: string, password: string, req:
   await audit(prismaAdmin, { tenantId: user.tenantId, userId: user.id, action: 'auth.login' }, req);
 
   return {
+    scope: 'tienda' as const,
     ...tokens,
     user: {
       id: user.id,
@@ -165,6 +193,7 @@ export async function completeTwoFactorLogin(
     }, req);
 
     return {
+      scope: 'tienda' as const,
       ...tokens,
       user: {
         id: user.id,
@@ -194,6 +223,7 @@ export async function completeTwoFactorLogin(
     after: { twoFactor: true },
   }, req);
   return {
+    scope: 'plataforma' as const,
     ...tokens,
     admin: { id: admin.id, name: admin.name, email: admin.email },
     recoveryCodesLeft: await countRecoveryCodes(principal),
@@ -219,6 +249,7 @@ export async function loginPlatformUser(identifier: string, password: string, re
       action: 'platform.login_2fa_challenge',
     }, req);
     return {
+      scope: 'plataforma' as const,
       requiresTwoFactor: true as const,
       challengeToken: signChallengeToken({ sub: admin.id, kind: 'platform' }),
     };
@@ -226,7 +257,11 @@ export async function loginPlatformUser(identifier: string, password: string, re
 
   const tokens = await issueTokens({ kind: 'platform', id: admin.id, req });
   await audit(prismaAdmin, { platformUserId: admin.id, action: 'platform.login' }, req);
-  return { ...tokens, admin: { id: admin.id, name: admin.name, email: admin.email } };
+  return {
+    scope: 'plataforma' as const,
+    ...tokens,
+    admin: { id: admin.id, name: admin.name, email: admin.email },
+  };
 }
 
 export async function rotateRefreshToken(rawToken: string, req: Request): Promise<TokenPair> {

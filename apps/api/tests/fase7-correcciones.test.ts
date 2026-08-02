@@ -128,6 +128,56 @@ describe('1. Ingreso por nombre de usuario (D-036)', () => {
   });
 });
 
+describe('4. Ingreso unificado (D-041)', () => {
+  it('el mismo formulario resuelve una cuenta de tienda', async () => {
+    const res = await login('owner1');
+    expect(res.status).toBe(200);
+    expect(res.body.scope).toBe('tienda');
+    expect(res.body.tenant.name).toBeTruthy();
+  });
+
+  it('...y una cuenta de plataforma, sin puerta aparte', async () => {
+    const res = await request(app).post('/api/auth/login').send({
+      username: 'superadmin',
+      password: process.env.SEED_SUPERADMIN_PASSWORD ?? 'SuperAdmin!2026',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.scope).toBe('plataforma');
+    expect(res.body.admin.name).toBeTruthy();
+
+    // Y el token sirve de verdad en el panel de plataforma
+    const panel = await request(app)
+      .get('/api/platform/metrics')
+      .set('Authorization', `Bearer ${res.body.accessToken}`);
+    expect(panel.status).toBe(200);
+  });
+
+  it('un usuario inexistente no revela que no existe', async () => {
+    const inexistente = await login('no-existe-esta-cuenta');
+    const claveMala = await login('owner1', 'incorrecta');
+    const adminClaveMala = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'superadmin', password: 'incorrecta' });
+
+    expect(inexistente.status).toBe(401);
+    expect(claveMala.status).toBe(401);
+    expect(adminClaveMala.status).toBe(401);
+    expect(inexistente.body.error.message).toBe(claveMala.body.error.message);
+    expect(adminClaveMala.body.error.message).toBe(claveMala.body.error.message);
+  });
+
+  it('la cuenta de plataforma sigue sin poder operar como tienda', async () => {
+    const res = await request(app).post('/api/auth/login').send({
+      username: 'superadmin',
+      password: process.env.SEED_SUPERADMIN_PASSWORD ?? 'SuperAdmin!2026',
+    });
+    const tienda = await request(app)
+      .get('/api/stores')
+      .set('Authorization', `Bearer ${res.body.accessToken}`);
+    expect(tienda.status).toBe(401);
+  });
+});
+
 describe('2. Membresía de tienda exigida en mutaciones sensibles', () => {
   it('no puede abrir ni mover la caja de una sucursal donde no es miembro', async () => {
     // El dueño abre la caja de la sucursal ajena
