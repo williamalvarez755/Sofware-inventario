@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { formatQ, toCentavos } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { CameraScanner } from '../components/CameraScanner';
+import { Icon } from '../components/Icon';
 import { Page } from '../components/Nav';
 import {
   Badge,
@@ -27,6 +29,7 @@ interface ProductRow {
   category: Category | null;
   unit: Unit;
   price: string;
+  barcodes?: { id: string; barcode: string }[];
   stockQty?: string;
   minStock?: string;
   lowStock?: boolean;
@@ -65,6 +68,10 @@ export function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // Código traído del escaneo: entra prellenado al alta para que el tendero
+  // solo escriba nombre y precio.
+  const [scanBarcode, setScanBarcode] = useState('');
+  const [showScan, setShowScan] = useState(false);
   const [adjustProduct, setAdjustProduct] = useState<ProductRow | null>(null);
   const [kardexProduct, setKardexProduct] = useState<ProductRow | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -151,7 +158,17 @@ export function ProductsPage() {
                   e.target.value = '';
                 }}
               />
-              <Button variant="primary" icon="mas" onClick={() => setShowCreate(true)}>
+              <Button variant="outline" icon="codigo" onClick={() => setShowScan(true)}>
+                Escanear código
+              </Button>
+              <Button
+                variant="primary"
+                icon="mas"
+                onClick={() => {
+                  setScanBarcode('');
+                  setShowCreate(true);
+                }}
+              >
                 Nuevo producto
               </Button>
             </>
@@ -171,7 +188,16 @@ export function ProductsPage() {
           <Row key={p.id}>
             <Cell>
               <span className="block font-medium text-[hsl(var(--text-1))]">{p.name}</span>
-              <span className="text-xs text-[hsl(var(--text-3))]">{p.sku}</span>
+              <span className="flex items-center gap-2 text-xs text-[hsl(var(--text-3))]">
+                {p.sku}
+                {p.barcodes?.[0] && (
+                  <span className="inline-flex items-center gap-1">
+                    <Icon name="codigo" size={13} />
+                    <span className="money">{p.barcodes[0].barcode}</span>
+                    {p.barcodes.length > 1 && <span>+{p.barcodes.length - 1}</span>}
+                  </span>
+                )}
+              </span>
             </Cell>
             <Cell>{p.category?.name ?? '—'}</Cell>
             <Cell mono align="right">{formatQ(BigInt(p.price))}</Cell>
@@ -208,13 +234,35 @@ export function ProductsPage() {
         )}
       </Table>
 
+      {showScan && (
+        <ScanModal
+          storeId={storeId}
+          onClose={() => setShowScan(false)}
+          onCreate={(code) => {
+            setShowScan(false);
+            setScanBarcode(code);
+            setShowCreate(true);
+          }}
+          onAdjust={(p) => {
+            setShowScan(false);
+            setAdjustProduct(p);
+          }}
+          onLinked={(msg) => {
+            setNotice(msg);
+            load();
+          }}
+        />
+      )}
+
       {showCreate && (
         <CreateProductModal
           storeId={storeId}
           units={units}
+          barcode={scanBarcode}
           onClose={() => setShowCreate(false)}
           onSaved={() => {
             setShowCreate(false);
+            setScanBarcode('');
             setNotice('Producto creado');
             load();
           }}
@@ -239,11 +287,290 @@ export function ProductsPage() {
   );
 }
 
+/**
+ * Alta por escaneo: el flujo real de una tienda es "tomo el producto de la
+ * bolsa del proveedor, lo paso por el lector y lo doy de alta". El lector HID
+ * escribe en el campo enfocado y termina en Enter, así que el campo se
+ * autoenfoca y se vuelve a enfocar tras cada consulta.
+ *
+ * Cuando el código no existe hay DOS salidas, y la segunda es la que evita el
+ * problema de verdad: el producto puede existir ya (cargado por CSV, sin
+ * código) y crear otra ficha duplicaría el inventario. Por eso se ofrece
+ * vincular el código a un producto existente.
+ */
+function ScanModal({
+  storeId, onClose, onCreate, onAdjust, onLinked,
+}: {
+  storeId: string;
+  onClose: () => void;
+  onCreate: (barcode: string) => void;
+  onAdjust: (product: ProductRow) => void;
+  onLinked: (mensaje: string) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [found, setFound] = useState<ProductRow | null>(null);
+  const [unknown, setUnknown] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const lookup = useCallback(
+    async (raw: string) => {
+      const term = raw.trim();
+      if (!term) return;
+      setBusy(true);
+      setError(null);
+      setFound(null);
+      setUnknown(null);
+      setLinking(false);
+      try {
+        const p = await api<ProductRow>(
+          `/api/products/barcode/${encodeURIComponent(term)}?storeId=${storeId}`,
+        );
+        setFound(p);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) setUnknown(term);
+        else setError(e instanceof ApiError ? e.message : 'Error al consultar el código');
+      } finally {
+        setBusy(false);
+        setCode('');
+        inputRef.current?.focus();
+      }
+    },
+    [storeId],
+  );
+
+  async function vincular(productId: string, nombre: string) {
+    if (!unknown) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/products/${productId}/barcodes`, {
+        method: 'POST',
+        body: JSON.stringify({ barcode: unknown }),
+      });
+      onLinked(`Código ${unknown} vinculado a ${nombre}`);
+      setUnknown(null);
+      setLinking(false);
+      inputRef.current?.focus();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No se pudo vincular el código');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Agregar por código de barras"
+      description="Pase el producto por el lector o use la cámara."
+      onClose={onClose}
+      wide
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          lookup(code);
+        }}
+        className="flex gap-2"
+      >
+        <div className="relative flex-1">
+          <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[hsl(var(--text-3))]">
+            <Icon name="codigo" size={19} />
+          </span>
+          <input
+            ref={inputRef}
+            autoFocus
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            // El lector HID termina la ráfaga con Enter. Se atiende aquí en vez
+            // de confiar en el envío implícito del formulario: es LA interacción
+            // de esta pantalla y no debe depender de una heurística del navegador.
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              lookup(e.currentTarget.value);
+            }}
+            placeholder="Escanee o escriba el código…"
+            aria-label="Código de barras"
+            className="money glass h-13 w-full rounded-2xl pl-11 pr-4 text-base text-[hsl(var(--text-1))] placeholder:font-sans placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCamera(true)}
+          aria-label="Escanear con la cámara"
+          title="Escanear con la cámara"
+          className="glass flex size-13 shrink-0 items-center justify-center rounded-2xl text-[hsl(var(--text-2))] transition-colors hover:text-[hsl(var(--accent))]"
+        >
+          <Icon name="camara" size={22} />
+        </button>
+        {/* Botón explícito: el lector manda Enter solo, pero quien teclea el
+            código a mano —en una tableta, sin teclado físico— necesita verlo. */}
+        <Button type="submit" variant="primary" loading={busy} className="h-13 px-5">
+          Buscar
+        </Button>
+      </form>
+
+      {error && <div className="mt-3"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+
+      {found && (
+        <Panel className="mt-3 border border-emerald-500/25 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <Badge tone="ok" icon="cheque">Ya está registrado</Badge>
+              <p className="mt-2 font-display text-lg font-semibold text-[hsl(var(--text-1))]">
+                {found.name}
+              </p>
+              <p className="text-xs text-[hsl(var(--text-3))]">{found.sku}</p>
+            </div>
+            <div className="text-right">
+              <p className="money text-lg font-semibold text-[hsl(var(--text-1))]">
+                {formatQ(BigInt(found.price))}
+              </p>
+              <p className="money mt-0.5 text-sm text-[hsl(var(--text-2))]">
+                {found.stockQty ?? '0'} {found.unit.code.toLowerCase()} en existencia
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" size="sm" icon="editar" onClick={() => onAdjust(found)}>
+              Ajustar existencia
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setFound(null)}>
+              Escanear otro
+            </Button>
+          </div>
+        </Panel>
+      )}
+
+      {unknown && !linking && (
+        <Panel className="mt-3 border border-[hsl(var(--accent)/0.3)] p-4">
+          <Badge tone="accent" icon="codigo">Código nuevo</Badge>
+          <p className="money mt-2 text-lg font-semibold text-[hsl(var(--text-1))]">{unknown}</p>
+          <p className="mt-1 text-sm text-[hsl(var(--text-2))]">
+            Ningún producto tiene este código todavía.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="primary" icon="mas" onClick={() => onCreate(unknown)}>
+              Crear producto nuevo
+            </Button>
+            <Button variant="outline" icon="buscar" onClick={() => setLinking(true)}>
+              Asignarlo a un producto que ya existe
+            </Button>
+          </div>
+        </Panel>
+      )}
+
+      {unknown && linking && (
+        <VincularProducto
+          storeId={storeId}
+          barcode={unknown}
+          busy={busy}
+          onPick={vincular}
+          onCancel={() => setLinking(false)}
+        />
+      )}
+
+      {!found && !unknown && !error && (
+        <p className="py-8 text-center text-sm text-[hsl(var(--text-3))]">
+          {busy ? 'Consultando…' : 'Esperando el código…'}
+        </p>
+      )}
+
+      {showCamera && (
+        <CameraScanner
+          onDetected={(detectado) => {
+            setShowCamera(false);
+            lookup(detectado);
+          }}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/** Buscador para pegarle un código escaneado a un producto que ya existía. */
+function VincularProducto({
+  storeId, barcode, busy, onPick, onCancel,
+}: {
+  storeId: string;
+  barcode: string;
+  busy: boolean;
+  onPick: (productId: string, nombre: string) => void;
+  onCancel: () => void;
+}) {
+  const [term, setTerm] = useState('');
+  const [hits, setHits] = useState<ProductRow[]>([]);
+
+  useEffect(() => {
+    if (term.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api<{ rows: ProductRow[] }>(
+        `/api/products?storeId=${storeId}&search=${encodeURIComponent(term.trim())}`,
+      )
+        .then((d) => setHits(d.rows.slice(0, 8)))
+        .catch(() => setHits([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [term, storeId]);
+
+  return (
+    <Panel className="mt-3 p-4">
+      <p className="text-sm text-[hsl(var(--text-2))]">
+        Busque el producto al que pertenece el código{' '}
+        <span className="money font-semibold text-[hsl(var(--text-1))]">{barcode}</span>
+      </p>
+      <Field
+        icon="buscar"
+        autoFocus
+        placeholder="Nombre o SKU del producto…"
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+        aria-label="Buscar producto para vincular"
+        className="mt-3"
+      />
+      <div className="mt-2 max-h-64 overflow-y-auto">
+        {hits.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            disabled={busy}
+            onClick={() => onPick(p.id, p.name)}
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06] disabled:opacity-50"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-sm text-[hsl(var(--text-1))]">{p.name}</span>
+              <span className="text-xs text-[hsl(var(--text-3))]">{p.sku}</span>
+            </span>
+            <span className="money shrink-0 text-sm text-[hsl(var(--text-2))]">
+              {p.stockQty ?? '0'} {p.unit.code.toLowerCase()}
+            </span>
+          </button>
+        ))}
+        {term.trim().length >= 2 && hits.length === 0 && (
+          <p className="py-6 text-center text-sm text-[hsl(var(--text-3))]">Sin coincidencias</p>
+        )}
+      </div>
+      <Button variant="ghost" size="sm" onClick={onCancel} className="mt-2">
+        Volver
+      </Button>
+    </Panel>
+  );
+}
+
 function CreateProductModal({
-  storeId, units, onClose, onSaved,
+  storeId, units, barcode, onClose, onSaved,
 }: {
   storeId: string;
   units: Unit[];
+  barcode?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -253,12 +580,13 @@ function CreateProductModal({
     categoryName: '',
     unitId: units.find((u) => u.code === 'UNIDAD')?.id ?? units[0]?.id ?? '',
     price: '',
-    barcode: '',
+    barcode: barcode ?? '',
     initialQty: '',
     initialCost: '',
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -291,12 +619,35 @@ function CreateProductModal({
   }
 
   return (
-    <Modal title="Nuevo producto" onClose={onClose} wide>
+    <Modal
+      title="Nuevo producto"
+      description={barcode ? `Con el código escaneado ${barcode}` : undefined}
+      onClose={onClose}
+      wide
+    >
       <form onSubmit={submit}>
         <Field label="Nombre" required autoFocus value={form.name} onChange={set('name')} />
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="SKU" placeholder="se genera solo" value={form.sku} onChange={set('sku')} />
-          <Field label="Código de barras" value={form.barcode} onChange={set('barcode')} />
+          <div className="flex items-end gap-2">
+            <Field
+              label="Código de barras"
+              icon="codigo"
+              placeholder="escanee o escriba"
+              value={form.barcode}
+              onChange={set('barcode')}
+              className="flex-1 money"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCamera(true)}
+              aria-label="Escanear con la cámara"
+              title="Escanear con la cámara"
+              className="mb-0 flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-[hsl(var(--text-2))] transition-colors hover:text-[hsl(var(--accent))]"
+            >
+              <Icon name="camara" size={19} />
+            </button>
+          </div>
           <Field
             label="Categoría"
             placeholder="ej. Bebidas"
@@ -349,6 +700,16 @@ function CreateProductModal({
           Guardar producto
         </Button>
       </form>
+
+      {showCamera && (
+        <CameraScanner
+          onDetected={(detectado) => {
+            setShowCamera(false);
+            setForm((f) => ({ ...f, barcode: detectado }));
+          }}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
     </Modal>
   );
 }

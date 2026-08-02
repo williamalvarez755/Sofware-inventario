@@ -37,7 +37,8 @@ export type IconName =
   | 'ojo'
   | 'basura'
   | 'editar'
-  | 'tienda';
+  | 'tienda'
+  | 'codigo';
 
 interface Glifo {
   /** Silueta de fondo, rellena y suave. */
@@ -302,6 +303,20 @@ const GLIFOS: Record<IconName, Glifo> = {
         <path d="M4.4 10.6V19a1.6 1.6 0 0 0 1.6 1.6h12a1.6 1.6 0 0 0 1.6-1.6v-8.4" />
         <path d="M2.8 9.4 5 4.2a1 1 0 0 1 .9-.6h12.2a1 1 0 0 1 .9.6l2.2 5.2a2.6 2.6 0 0 1-4.8 1.4 2.6 2.6 0 0 1-4.4 0 2.6 2.6 0 0 1-4.4 0 2.6 2.6 0 0 1-4.8-1.4Z" />
         <path d="M10 20.6v-4.8h4v4.8" />
+      </>
+    ),
+  },
+  // Marco de escaneo con las barras dentro: dice "código de barras" y "leer
+  // con el escáner" en la misma figura.
+  codigo: {
+    fondo: <rect x="6.2" y="8" width="11.6" height="8" rx="1.2" />,
+    trazo: (
+      <>
+        <path d="M3.4 9.2V7.4a1.8 1.8 0 0 1 1.8-1.8H7" />
+        <path d="M17 5.6h1.8a1.8 1.8 0 0 1 1.8 1.8v1.8" />
+        <path d="M20.6 14.8v1.8a1.8 1.8 0 0 1-1.8 1.8H17" />
+        <path d="M7 18.4H5.2a1.8 1.8 0 0 1-1.8-1.8v-1.8" />
+        <path d="M7.6 8.8v6.4M10.6 8.8v6.4M13.4 8.8v6.4M16.4 8.8v6.4" />
       </>
     ),
   },

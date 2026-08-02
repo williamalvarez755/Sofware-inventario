@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { v7 as uuidv7 } from 'uuid';
 import type { Request } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, type StoreProduct } from '@prisma/client';
 import { toCentavos, type ProductCreateInput, type ProductUpdateInput } from '@minimarket/shared';
 import { AppError, notFound } from '../../lib/errors.js';
 import { withTenantTx, type TenantClient } from '../../lib/prisma.js';
@@ -32,6 +32,54 @@ async function resolveCategory(
   return created.id;
 }
 
+/**
+ * Forma mínima que necesita `toProductRow`. Se declara estructuralmente en vez
+ * de derivarla de Prisma porque el `include` de la tienda es condicional: el
+ * tipo generado sería una unión incómoda de leer sin ganar nada.
+ */
+interface ProductRowSource {
+  id: string;
+  sku: string;
+  name: string;
+  basePrice: bigint;
+  isActive: boolean;
+  category: { id: string; name: string } | null;
+  unit: { id: string; code: string; allowsDecimals: boolean };
+  barcodes: { id: string; barcode: string }[];
+  storeProducts?: StoreProduct[];
+}
+
+/** Producto tal como lo consume el POS y el catálogo: precio ya resuelto
+ *  (override de tienda si existe) y costos solo para quien puede verlos (A10). */
+function toProductRow(p: ProductRowSource, includeCosts: boolean) {
+  const sp = p.storeProducts?.[0];
+  return {
+    id: p.id,
+    sku: p.sku,
+    name: p.name,
+    category: p.category,
+    unit: p.unit,
+    barcodes: p.barcodes,
+    price: sp?.priceOverride ?? p.basePrice,
+    basePrice: p.basePrice,
+    isActive: p.isActive,
+    ...(sp
+      ? {
+          stockQty: sp.stockQty,
+          minStock: sp.minStock,
+          lowStock: Number(sp.minStock) > 0 && Number(sp.stockQty) <= Number(sp.minStock),
+          ...(includeCosts ? { avgCost: sp.avgCost } : {}),
+        }
+      : {}),
+  };
+}
+
+const PRODUCT_INCLUDE = {
+  category: { select: { id: true, name: true } },
+  unit: { select: { id: true, code: true, allowsDecimals: true } },
+  barcodes: { select: { id: true, barcode: true } },
+} as const;
+
 export async function listProducts(
   db: TenantClient,
   opts: { search?: string; categoryId?: string; storeId?: string; page: number },
@@ -57,9 +105,7 @@ export async function listProducts(
       skip: (opts.page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: {
-        category: { select: { id: true, name: true } },
-        unit: { select: { id: true, code: true, allowsDecimals: true } },
-        barcodes: { select: { id: true, barcode: true } },
+        ...PRODUCT_INCLUDE,
         ...(opts.storeId
           ? { storeProducts: { where: { storeId: opts.storeId } } }
           : {}),
@@ -71,29 +117,50 @@ export async function listProducts(
     total,
     page: opts.page,
     pageSize: PAGE_SIZE,
-    rows: rows.map((p) => {
-      const sp = 'storeProducts' in p ? p.storeProducts[0] : undefined;
-      return {
-        id: p.id,
-        sku: p.sku,
-        name: p.name,
-        category: p.category,
-        unit: p.unit,
-        barcodes: p.barcodes,
-        price: sp?.priceOverride ?? p.basePrice,
-        basePrice: p.basePrice,
-        isActive: p.isActive,
-        ...(sp
-          ? {
-              stockQty: sp.stockQty,
-              minStock: sp.minStock,
-              lowStock: Number(sp.minStock) > 0 && Number(sp.stockQty) <= Number(sp.minStock),
-              ...(includeCosts ? { avgCost: sp.avgCost } : {}),
-            }
-          : {}),
-      };
-    }),
+    rows: rows.map((p) => toProductRow(p, includeCosts)),
   };
+}
+
+/**
+ * Búsqueda EXACTA por código de barras. El alta por escaneo necesita una
+ * respuesta binaria —existe o no existe— y `listProducts` no sirve: su búsqueda
+ * hace `contains` sobre el nombre, así que un código que coincide parcialmente
+ * con otro texto devolvería falsos positivos y el tendero terminaría con dos
+ * fichas del mismo producto.
+ */
+export async function findByBarcode(
+  db: TenantClient,
+  barcode: string,
+  storeId: string | undefined,
+  includeCosts: boolean,
+) {
+  const product = await db.product.findFirst({
+    where: { deletedAt: null, barcodes: { some: { barcode } } },
+    include: {
+      ...PRODUCT_INCLUDE,
+      ...(storeId ? { storeProducts: { where: { storeId } } } : {}),
+    },
+  });
+  return product ? toProductRow(product, includeCosts) : null;
+}
+
+/**
+ * Un código de barras identifica UNA presentación: si ya está tomado, decir
+ * "el registro ya existe" no le sirve al tendero. Necesita saber a qué producto
+ * pertenece para decidir si lo que tiene en la mano ya estaba registrado.
+ */
+export async function assertBarcodeFree(tx: Prisma.TransactionClient, barcode: string) {
+  const taken = await tx.productBarcode.findFirst({
+    where: { barcode },
+    include: { product: { select: { name: true, sku: true } } },
+  });
+  if (taken) {
+    throw new AppError(
+      409,
+      'BARCODE_TAKEN',
+      `El código ${barcode} ya pertenece a "${taken.product.name}" (${taken.product.sku})`,
+    );
+  }
 }
 
 export async function getProduct(db: TenantClient, id: string, includeCosts: boolean) {
@@ -135,6 +202,7 @@ export async function createProduct(
   req: Request,
 ) {
   return withTenantTx(tenantId, async (tx) => {
+    if (input.barcode) await assertBarcodeFree(tx, input.barcode);
     const categoryId = await resolveCategory(tx, tenantId, input.categoryId, input.categoryName);
     const product = await tx.product.create({
       data: {

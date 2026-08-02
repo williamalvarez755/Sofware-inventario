@@ -96,6 +96,96 @@ describe('Productos', () => {
   });
 });
 
+describe('Alta por código de barras', () => {
+  /** Crea un producto y devuelve su id; el código va aparte para reutilizarlo. */
+  async function crear(name: string, barcode?: string) {
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name,
+        unitId: unidadId,
+        price: 500,
+        ...(barcode ? { barcode } : {}),
+        initial: { storeId: storeAId, qty: 7, unitCost: 300 },
+      });
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  it('el código escaneado devuelve el producto con la existencia de la tienda', async () => {
+    const barcode = `7501${Date.now()}`;
+    await crear('Escaneado existente', barcode);
+    const res = await request(app)
+      .get(`/api/products/barcode/${barcode}?storeId=${storeAId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Escaneado existente');
+    expect(res.body.stockQty).toBe('7');
+  });
+
+  it('un código sin dueño responde 404: es la señal para ofrecer el alta', async () => {
+    const res = await request(app)
+      .get(`/api/products/barcode/NOEXISTE-${Date.now()}?storeId=${storeAId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('la coincidencia es exacta: no hay falsos positivos por el nombre', async () => {
+    const stamp = Date.now();
+    // El nombre CONTIENE el texto buscado; la lista lo encuentra, el escaneo no.
+    await crear(`Promo ${stamp} del mes`);
+    const lista = await request(app)
+      .get(`/api/products?search=${stamp}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(lista.body.rows.length).toBeGreaterThan(0);
+
+    const escaneo = await request(app)
+      .get(`/api/products/barcode/${stamp}?storeId=${storeAId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(escaneo.status).toBe(404);
+  });
+
+  it('un código ya usado no se puede repetir, y el error dice de quién es', async () => {
+    const barcode = `DUP-${Date.now()}`;
+    await crear('Dueño del código', barcode);
+
+    const repetido = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Intento duplicado', unitId: unidadId, price: 100, barcode });
+    expect(repetido.status).toBe(409);
+    expect(repetido.body.error.code).toBe('BARCODE_TAKEN');
+    expect(repetido.body.error.message).toContain('Dueño del código');
+  });
+
+  it('vincula un código escaneado a un producto que ya existía sin código', async () => {
+    const productId = await crear('Cargado por CSV sin código');
+    const barcode = `LINK-${Date.now()}`;
+
+    const res = await request(app)
+      .post(`/api/products/${productId}/barcodes`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ barcode });
+    expect(res.status).toBe(201);
+
+    // Escanearlo ahora lleva al MISMO producto: no se duplicó la ficha.
+    const escaneo = await request(app)
+      .get(`/api/products/barcode/${barcode}?storeId=${storeAId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(escaneo.body.id).toBe(productId);
+  });
+
+  it('el código de A no existe para B (aislamiento)', async () => {
+    const barcode = `ISO-${Date.now()}`;
+    await crear('Solo de A con código', barcode);
+    const res = await request(app)
+      .get(`/api/products/barcode/${barcode}`)
+      .set('Authorization', `Bearer ${owner2Token}`);
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('Importación CSV', () => {
   it('importa filas válidas, reporta filas malas y no duplica al reimportar', async () => {
     const stamp = Date.now();

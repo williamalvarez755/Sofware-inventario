@@ -3,7 +3,7 @@
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
 > **Estado:** **Fases 0 a 7 COMPLETADAS** — producto listo para operar en tienda real, con interfaz definitiva. Ver §9 y el backlog en §10.
-> **Última actualización:** 2026-08-01.
+> **Última actualización:** 2026-08-02.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
 
@@ -492,6 +492,20 @@ expense_categories 1─N expenses
 >
 > **Segunda pasada de interfaz (mismo día, sobre comentarios del dueño).** La tipografía se cambió a **Outfit + Manrope** y el dinero dejó la monoespaciada: mantiene las cifras tabulares —que es lo que alinea las columnas— pero se lee como parte de la aplicación y no como una terminal (D-042). El icono de caja registradora se sustituyó por una **marca propia**, el toldo de una tienda de barrio, que a 32 px se reconoce de inmediato (D-043). Los iconos pasaron a **dúotono**: silueta rellena suave más el trazo encima, que es lo que los separa de un pictograma genérico (D-040). Los dos dashboards se rearmaron alrededor de **una cifra protagonista** —lo vendido y lo que quedó, con su margen; el ingreso recurrente en el panel de plataforma— con los indicadores secundarios debajo y el stock bajo mostrando una barra proporcional que revela de un vistazo qué reposición urge. Y el **ingreso quedó unificado** (D-041): desapareció el enlace de "¿administra la plataforma?" y el mismo formulario lleva al tendero a su tienda y al super admin a su panel.
 
+**Alta de productos por código de barras — ✅ 2026-08-02**
+
+> Pedido del dueño tras probar el producto. Hasta ahora el código de barras era un campo más del formulario de alta; el flujo real de una tienda es al revés: el tendero saca el producto de la bolsa del proveedor, lo pasa por el lector y **desde ahí** lo da de alta.
+>
+> Nuevo endpoint `GET /api/products/barcode/:code` de coincidencia **exacta**. No sirve reutilizar la búsqueda del catálogo: esa hace `contains` sobre el nombre, así que un código que aparece dentro de otro texto daría un falso positivo y el tendero terminaría con dos fichas del mismo producto (probado explícitamente).
+>
+> En la pantalla de Productos, el botón **Escanear código** abre un campo autoenfocado (el lector HID escribe ahí y termina en Enter, atendido de forma explícita para no depender del envío implícito del formulario) con respaldo de cámara. Según lo que devuelva el código:
+> - **Ya registrado** → muestra producto, precio y existencia en la tienda, con acceso directo a ajustar.
+> - **Código nuevo** → dos salidas. Crear el producto con el código ya prellenado, o —y esta es la que evita el problema de verdad— **asignarlo a un producto que ya existe**: quien cargó su catálogo por CSV no tiene códigos, y sin esta opción crearía una ficha duplicada por cada producto que escanee.
+>
+> Un código no se puede repetir y el error **dice a qué producto pertenece** ("El código 7401… ya pertenece a Maseca 1lb (MASECA-1)"): el mensaje genérico de conflicto no le sirve a alguien que tiene el producto en la mano. La lista de productos ahora muestra el código bajo el SKU.
+>
+> **138 pruebas en el API** (6 nuevas: coincidencia exacta, 404 como señal de alta, ausencia de falsos positivos, código duplicado con nombre del dueño, vinculación a producto existente y aislamiento entre tenants) y 11 en la web. Verificado en navegador: código conocido → Maseca 1lb Q 8.50 con 33 en existencia; código nuevo → alta prellenada → Jabón Rey 300g creado → el mismo código lo encuentra con sus 24 unidades; y un tercer código vinculado a Agua pura 500ml, que pasó a tener dos códigos.
+
 **Post-lanzamiento (priorizar según clientes):** ver §10 Mejoras futuras.
 
 ---
@@ -565,6 +579,7 @@ expense_categories 1─N expenses
 | D-041 | 2026-08-01 | **Un solo formulario de ingreso** para el tendero y el super admin: el servidor resuelve el tipo de cuenta y responde con `scope`, y la aplicación encamina a cada quien | Pedido del dueño: sobraba el enlace de "¿administra la plataforma?". Nadie tiene que saber que existen dos puertas. No filtra nada: una cuenta inexistente y una contraseña incorrecta dan exactamente el mismo error, verificado por prueba. |
 | D-042 | 2026-08-01 | Tipografía **Outfit** (títulos) + **Manrope** (todo lo demás, incluidas las cifras con `tabular-nums`). Se descarta la monoespaciada para el dinero | Manrope alinea columnas igual de bien con cifras tabulares, pero un precio se lee como parte de la interfaz y no como salida de terminal. La monoespaciada anterior se sentía dura para lo que un cajero mira ocho horas al día. |
 | D-043 | 2026-08-01 | Marca propia (toldo de tienda) en lugar del icono de caja registradora | A 24–32 px la caja registradora se leía como un rectángulo con ruido dentro. Un toldo se reconoce al instante, dice "tienda" sin ambigüedad y toma el acento del tema. |
+| D-044 | 2026-08-02 | El alta por escaneo usa un endpoint de coincidencia **exacta** (`/api/products/barcode/:code`), no la búsqueda del catálogo, y ofrece **vincular el código a un producto existente** además de crear uno nuevo | La búsqueda hace `contains` sobre el nombre: un código contenido en otro texto daría un falso positivo y crearía una ficha duplicada. Y quien cargó su catálogo por CSV no tiene códigos: sin la opción de vincular, cada escaneo de un producto que ya existe generaría un duplicado — exactamente el problema que el escáner debía evitar. |
 
 ---
 

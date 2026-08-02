@@ -15,7 +15,9 @@ import { requireAuth } from '../../middleware/auth.js';
 import { loadMemberships, requirePermission } from '../../middleware/permissions.js';
 import { validate } from '../../middleware/validate.js';
 import {
+  assertBarcodeFree,
   createProduct,
+  findByBarcode,
   getProduct,
   importProductsCsv,
   listProducts,
@@ -29,6 +31,24 @@ productsRouter.get('/', async (req, res) => {
   const query = productListQuerySchema.parse(req.query);
   if (query.storeId) assertStoreAccess(req.memberships!, query.storeId);
   res.json(await listProducts(req.db!, query, canViewCosts(req.memberships!)));
+});
+
+/**
+ * Consulta por código escaneado. Va ANTES de `/:id` para que un código como
+ * "barcode" no se interprete como identificador. Devuelve 404 cuando nadie lo
+ * tiene: es la señal que usa la pantalla de productos para ofrecer el alta.
+ */
+productsRouter.get('/barcode/:code', async (req, res) => {
+  const storeId = typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
+  if (storeId) assertStoreAccess(req.memberships!, storeId);
+  const product = await findByBarcode(
+    req.db!,
+    String(req.params.code).trim(),
+    storeId,
+    canViewCosts(req.memberships!),
+  );
+  if (!product) throw notFound('Ningún producto tiene ese código');
+  res.json(product);
 });
 
 productsRouter.get('/:id', async (req, res) => {
@@ -67,6 +87,7 @@ productsRouter.post(
     const barcode = await withTenantTx(tenantId, async (tx) => {
       const product = await tx.product.findFirst({ where: { id: productId, deletedAt: null } });
       if (!product) throw notFound('Producto no encontrado');
+      await assertBarcodeFree(tx, req.body.barcode);
       return tx.productBarcode.create({
         data: { id: uuidv7(), tenantId, productId, barcode: req.body.barcode },
       });
