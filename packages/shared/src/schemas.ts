@@ -35,6 +35,27 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(20),
 });
 
+/**
+ * Contraseña de cuenta. El mínimo es 8 porque la contraseña temporal que
+ * genera el alta ya viene fuerte; el riesgo real es que el tendero la cambie
+ * por algo de cuatro letras al primer ingreso.
+ */
+export const passwordSchema = z
+  .string()
+  .min(8, 'Mínimo 8 caracteres')
+  .max(200, 'Máximo 200 caracteres');
+
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Ingrese su contraseña actual'),
+    newPassword: passwordSchema,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: 'La nueva contraseña debe ser distinta de la actual',
+    path: ['newPassword'],
+  });
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
+
 // ---- 2FA (Fase 6) ----
 /** Acepta 6 dígitos (TOTP) o un código de recuperación con guion. */
 const secondFactorCode = z
@@ -299,6 +320,9 @@ export const tenantOnboardSchema = z.object({
   ownerName: z.string().trim().min(2, 'Nombre del dueño requerido').max(80),
   ownerUsername: usernameSchema.optional(), // si se omite, se deriva del correo
   ownerEmail: z.string().email('Correo inválido').toLowerCase().trim(),
+  // Si se omite, el sistema genera una temporal legible por teléfono (D-029).
+  // En ambos casos el dueño está obligado a cambiarla al primer ingreso.
+  ownerPassword: passwordSchema.optional(),
   ownerPhone: z.string().trim().max(20).optional(),
   storeName: z.string().trim().min(2, 'Nombre de la tienda requerido').max(80),
   taxRegime: z.enum(['GENERAL', 'PEQUENO_CONTRIBUYENTE', 'NINGUNO']).default('NINGUNO'),

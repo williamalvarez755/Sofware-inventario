@@ -61,7 +61,10 @@ export async function onboardTenant(
     );
   }
 
-  const password = temporaryPassword();
+  // El super admin puede dictar él mismo la contraseña —a veces el cliente
+  // está al teléfono y prefiere una que recuerde— o dejar que se genere. En
+  // los dos casos queda marcada como temporal: el dueño la cambia al entrar.
+  const password = input.ownerPassword ?? temporaryPassword();
   const passwordHash = await argon2.hash(password);
   const tenantId = uuidv7();
   const storeId = uuidv7();

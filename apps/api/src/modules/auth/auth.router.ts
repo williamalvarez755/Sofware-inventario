@@ -1,6 +1,11 @@
 import { Router } from 'express';
-import { loginSchema, refreshSchema, twoFactorLoginSchema } from '@minimarket/shared';
-import { requireAuth } from '../../middleware/auth.js';
+import {
+  loginSchema,
+  passwordChangeSchema,
+  refreshSchema,
+  twoFactorLoginSchema,
+} from '@minimarket/shared';
+import { requireAuth, requireSelfAuth } from '../../middleware/auth.js';
 import {
   authIpLimiter,
   passwordAttemptLimiter,
@@ -9,6 +14,7 @@ import {
 import { validate } from '../../middleware/validate.js';
 import { unauthorized } from '../../lib/errors.js';
 import {
+  changeOwnPassword,
   completeTwoFactorLogin,
   login,
   revokeSession,
@@ -43,6 +49,26 @@ authRouter.post(
 authRouter.post('/refresh', validate(refreshSchema), async (req, res) => {
   res.json(await rotateRefreshToken(req.body.refreshToken, req));
 });
+
+/**
+ * Cambio de la propia contraseña. Sirve tanto al tendero que recibió una
+ * temporal como al super admin. Lleva el mismo límite de intentos que el
+ * login: la contraseña actual es un secreto y no se prueba a ciegas.
+ */
+authRouter.post(
+  '/password',
+  authIpLimiter,
+  requireSelfAuth,
+  validate(passwordChangeSchema),
+  async (req, res) => {
+    const tokens = await changeOwnPassword(
+      { kind: req.auth!.kind, id: req.auth!.userId, tenantId: req.auth!.tenantId },
+      req.body,
+      req,
+    );
+    res.json(tokens);
+  },
+);
 
 authRouter.post('/logout', validate(refreshSchema), async (req, res) => {
   await revokeSession(req.body.refreshToken, req);

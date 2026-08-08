@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { restorePlatformSession } from './api/platformClient';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeProvider';
+import { CambiarContrasena } from './components/CambiarContrasena';
 import { Marca } from './components/Marca';
 import { CashPage } from './pages/CashPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -27,7 +28,12 @@ function Cargando() {
 function Protected({ children }: { children: React.ReactElement }) {
   const { me, loading } = useAuth();
   if (loading) return <Cargando />;
-  return me ? children : <Navigate to="/login" replace />;
+  if (!me) return <Navigate to="/login" replace />;
+  // Contraseña entregada por el super admin: la conocen dos personas, así que
+  // no se entra a ninguna pantalla hasta cambiarla. Se corta acá, en la puerta
+  // de TODAS las rutas, y no en cada página.
+  if (me.user.mustChangePassword) return <CambiarContrasena obligatorio />;
+  return children;
 }
 
 /** El panel de plataforma tiene su propia sesión, aislada de la del tendero. */

@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api, getImpersonation, stopImpersonation } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { CambiarContrasena } from './CambiarContrasena';
 import { Icon, type IconName } from './Icon';
 import { Marca } from './Marca';
 import { ThemePicker } from './ThemePicker';
-import { Button, IconButton, cx } from './ui';
+import { Button, IconButton, Modal, cx } from './ui';
 
 interface NotificationRow {
   id: string;
@@ -30,6 +31,7 @@ export function Nav() {
   const { me, logout } = useAuth();
   const { pathname } = useLocation();
   const impersonation = getImpersonation();
+  const [cambiarClave, setCambiarClave] = useState(false);
 
   if (!me) return null;
 
@@ -99,10 +101,27 @@ export function Nav() {
                 {me.user.username}
               </p>
             </div>
+            {!impersonation && (
+              <IconButton
+                icon="candado"
+                label="Cambiar mi contraseña"
+                onClick={() => setCambiarClave(true)}
+              />
+            )}
             {!impersonation && <IconButton icon="salir" label="Cerrar sesión" onClick={logout} />}
           </div>
         </div>
       </header>
+
+      {cambiarClave && (
+        <Modal
+          title="Cambiar mi contraseña"
+          description={`Cuenta: ${me.user.username}`}
+          onClose={() => setCambiarClave(false)}
+        >
+          <CambiarContrasena onListo={() => setCambiarClave(false)} />
+        </Modal>
+      )}
     </>
   );
 }

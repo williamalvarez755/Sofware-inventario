@@ -67,6 +67,34 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   next();
 }
 
+/**
+ * Autenticación que acepta cuenta de tienda O de plataforma. Existe para las
+ * acciones que cualquier cuenta hace sobre sí misma —hoy, cambiar su propia
+ * contraseña— sin duplicar la ruta por tipo de usuario.
+ *
+ * No consulta el estado del tenant a propósito: alguien de un negocio
+ * suspendido por falta de pago debe poder seguir cambiando su contraseña; el
+ * resto del sistema ya le está negado.
+ */
+export function requireSelfAuth(req: Request, _res: Response, next: NextFunction) {
+  const payload = verifyAccessToken(bearerToken(req));
+  // Una sesión de soporte jamás cambia la contraseña del cliente: sería
+  // apropiarse de la cuenta, y encima quedaría a nombre del dueño (D-028).
+  if (payload.imp) {
+    throw forbidden(
+      'IMPERSONATION_READ_ONLY',
+      'La sesión de soporte es de solo lectura: no puede cambiar credenciales',
+    );
+  }
+  if (payload.kind === 'user') {
+    if (!payload.ten) throw unauthorized();
+    req.auth = { kind: 'user', userId: payload.sub, tenantId: payload.ten };
+  } else {
+    req.auth = { kind: 'platform', userId: payload.sub };
+  }
+  next();
+}
+
 /** Autenticación de super admins (módulo plataforma). */
 export function requirePlatformAuth(req: Request, _res: Response, next: NextFunction) {
   const payload = verifyAccessToken(bearerToken(req));

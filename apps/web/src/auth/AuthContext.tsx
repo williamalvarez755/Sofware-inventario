@@ -36,6 +36,7 @@ interface AuthState {
   loading: boolean;
   login(username: string, password: string): Promise<LoginOutcome>;
   completeTwoFactor(challengeToken: string, code: string): Promise<LoginOutcome>;
+  cambiarContrasena(actual: string, nueva: string): Promise<void>;
   logout(): Promise<void>;
 }
 
@@ -99,13 +100,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [aplicarSesion],
   );
 
+  /**
+   * El servidor revoca todas las sesiones al cambiar la contraseña y devuelve
+   * una nueva para quien la cambió: por eso hay que guardarla, o el siguiente
+   * request saldría con un token ya revocado.
+   */
+  const cambiarContrasena = useCallback<AuthState['cambiarContrasena']>(
+    async (actual, nueva) => {
+      const tokens = await api<Sesion>('/api/auth/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: actual, newPassword: nueva }),
+      });
+      setSession(tokens);
+      setMe(await api<Me>('/api/auth/me'));
+    },
+    [],
+  );
+
   const logout = useCallback(async () => {
     await logoutRequest();
     setMe(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ me, loading, login, completeTwoFactor, logout }}>
+    <AuthContext.Provider
+      value={{ me, loading, login, completeTwoFactor, cambiarContrasena, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

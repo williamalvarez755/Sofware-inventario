@@ -506,6 +506,20 @@ expense_categories 1─N expenses
 >
 > **138 pruebas en el API** (6 nuevas: coincidencia exacta, 404 como señal de alta, ausencia de falsos positivos, código duplicado con nombre del dueño, vinculación a producto existente y aislamiento entre tenants) y 11 en la web. Verificado en navegador: código conocido → Maseca 1lb Q 8.50 con 33 en existencia; código nuevo → alta prellenada → Jabón Rey 300g creado → el mismo código lo encuentra con sus 24 unidades; y un tercer código vinculado a Agua pura 500ml, que pasó a tener dos códigos.
 
+**Cambio de contraseña — ✅ 2026-08-08**
+
+> Hueco encontrado durante el despliegue real, y de los serios: el alta de un cliente marcaba `mustChangePassword = true` y la documentación decía "cambio forzado al primer ingreso", pero **el endpoint nunca existió**. El dato se mostraba y nada más. En la práctica, cada tendero se quedaba para siempre con la contraseña que el super admin le dictó por teléfono — una credencial que conocen dos personas.
+>
+> `POST /api/auth/password` sirve a cuentas de tienda y de plataforma con la misma ruta (nuevo `requireSelfAuth`, que acepta ambos tipos). Exige la **contraseña actual**: sin eso, una sesión olvidada en la computadora del mostrador bastaría para apropiarse de la cuenta. Al cambiarla se **revocan todas las sesiones** y se emite una nueva para quien hizo el cambio — es lo que la gente espera de "cambié mi contraseña", y quien haya quedado dentro sale. No consulta el estado del tenant a propósito: un negocio suspendido por mora debe poder seguir cambiando su clave.
+>
+> Una **sesión de soporte no puede cambiar credenciales ajenas** (403). Sería apropiarse de la cuenta, y encima quedaría registrado a nombre del dueño (D-028).
+>
+> En la aplicación, `mustChangePassword` corta en la puerta de **todas** las rutas, no página por página. Y hay un acceso voluntario desde la barra superior.
+>
+> **El super admin puede elegir la contraseña inicial** del cliente (`ownerPassword` opcional en el alta) en vez de usar la generada: a veces el cliente está al teléfono y prefiere una que recuerde. En ambos casos queda marcada como temporal.
+>
+> **147 pruebas en el API** (9 nuevas) y 11 en la web. Verificado en navegador: la pantalla obligatoria tapa la aplicación, el cambio renueva la sesión sin pedir volver a entrar, y el cambio voluntario desde la barra funciona.
+
 **Post-lanzamiento (priorizar según clientes):** ver §10 Mejoras futuras.
 
 ---
@@ -579,6 +593,7 @@ expense_categories 1─N expenses
 | D-041 | 2026-08-01 | **Un solo formulario de ingreso** para el tendero y el super admin: el servidor resuelve el tipo de cuenta y responde con `scope`, y la aplicación encamina a cada quien | Pedido del dueño: sobraba el enlace de "¿administra la plataforma?". Nadie tiene que saber que existen dos puertas. No filtra nada: una cuenta inexistente y una contraseña incorrecta dan exactamente el mismo error, verificado por prueba. |
 | D-042 | 2026-08-01 | Tipografía **Outfit** (títulos) + **Manrope** (todo lo demás, incluidas las cifras con `tabular-nums`). Se descarta la monoespaciada para el dinero | Manrope alinea columnas igual de bien con cifras tabulares, pero un precio se lee como parte de la interfaz y no como salida de terminal. La monoespaciada anterior se sentía dura para lo que un cajero mira ocho horas al día. |
 | D-043 | 2026-08-01 | Marca propia (toldo de tienda) en lugar del icono de caja registradora | A 24–32 px la caja registradora se leía como un rectángulo con ruido dentro. Un toldo se reconoce al instante, dice "tienda" sin ambigüedad y toma el acento del tema. |
+| D-045 | 2026-08-08 | Cambiar la contraseña **revoca todas las sesiones** y devuelve uno nuevo a quien la cambió; exige la contraseña actual; una sesión de soporte no puede hacerlo. El super admin puede fijar la contraseña inicial del cliente | Cerrar sesiones es lo que la gente espera al cambiar su clave: si alguien más había quedado dentro, sale. Devolver un token nuevo evita expulsar también a quien hizo el cambio. Pedir la actual impide que una sesión olvidada en el mostrador se convierta en apropiación de la cuenta. Y que soporte no pueda cambiarla es la contraparte necesaria de la impersonación de solo lectura. |
 | D-044 | 2026-08-02 | El alta por escaneo usa un endpoint de coincidencia **exacta** (`/api/products/barcode/:code`), no la búsqueda del catálogo, y ofrece **vincular el código a un producto existente** además de crear uno nuevo | La búsqueda hace `contains` sobre el nombre: un código contenido en otro texto daría un falso positivo y crearía una ficha duplicada. Y quien cargó su catálogo por CSV no tiene códigos: sin la opción de vincular, cada escaneo de un producto que ya existe generaría un duplicado — exactamente el problema que el escáner debía evitar. |
 
 ---

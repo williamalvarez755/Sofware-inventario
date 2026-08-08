@@ -317,6 +317,71 @@ export async function rotateRefreshToken(rawToken: string, req: Request): Promis
   });
 }
 
+/**
+ * Cambio de contraseña de la propia cuenta (tienda o plataforma).
+ *
+ * Exige la contraseña actual: sin eso, un token robado o una sesión olvidada
+ * en una computadora de la tienda bastarían para apropiarse de la cuenta.
+ *
+ * Al cambiarla se revocan TODAS las sesiones y se emite una nueva para quien
+ * hizo el cambio. Es el comportamiento que la gente espera de "cambié mi
+ * contraseña": si alguien más había quedado dentro, sale. Y es lo que vuelve
+ * útil la contraseña temporal del alta — hasta ahora se marcaba que había que
+ * cambiarla, pero no existía forma de hacerlo.
+ */
+export async function changeOwnPassword(
+  principal: { kind: PrincipalKind; id: string; tenantId?: string },
+  input: { currentPassword: string; newPassword: string },
+  req: Request,
+): Promise<TokenPair> {
+  const esPlataforma = principal.kind === 'platform';
+  const cuenta = esPlataforma
+    ? await prismaAdmin.platformUser.findUnique({ where: { id: principal.id } })
+    : await prismaAdmin.user.findUnique({ where: { id: principal.id } });
+
+  if (!cuenta || !cuenta.isActive) throw unauthorized();
+  if (!(await argon2.verify(cuenta.passwordHash, input.currentPassword))) {
+    await audit(prismaAdmin, {
+      tenantId: principal.tenantId,
+      ...(esPlataforma ? { platformUserId: cuenta.id } : { userId: cuenta.id }),
+      action: 'auth.password_change_failed',
+    }, req);
+    throw unauthorized('La contraseña actual no es correcta');
+  }
+
+  const passwordHash = await argon2.hash(input.newPassword);
+  await prismaAdmin.$transaction(async (tx) => {
+    if (esPlataforma) {
+      await tx.platformUser.update({ where: { id: cuenta.id }, data: { passwordHash } });
+    } else {
+      await tx.user.update({
+        where: { id: cuenta.id },
+        data: { passwordHash, mustChangePassword: false },
+      });
+    }
+    await tx.refreshToken.updateMany({
+      where: {
+        ...(esPlataforma ? { platformUserId: cuenta.id } : { userId: cuenta.id }),
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+    await audit(tx, {
+      tenantId: principal.tenantId,
+      ...(esPlataforma ? { platformUserId: cuenta.id } : { userId: cuenta.id }),
+      action: 'auth.password_change',
+    }, req);
+  });
+
+  // Sesión nueva para quien la cambió: no tiene por qué volver a ingresar.
+  return issueTokens({
+    kind: principal.kind,
+    id: cuenta.id,
+    ...(principal.tenantId ? { tenantId: principal.tenantId } : {}),
+    req,
+  });
+}
+
 export async function revokeSession(rawToken: string, req: Request): Promise<void> {
   const row = await prismaAdmin.refreshToken.findUnique({
     where: { tokenHash: hashRefreshToken(rawToken) },

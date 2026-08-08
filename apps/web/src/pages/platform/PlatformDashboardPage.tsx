@@ -333,7 +333,7 @@ function OnboardModal({
 }) {
   const [form, setForm] = useState({
     name: '', slug: '', planCode: plans[0]?.code ?? '', ownerName: '',
-    ownerUsername: '', ownerEmail: '', ownerPhone: '', storeName: '',
+    ownerUsername: '', ownerEmail: '', ownerPhone: '', ownerPassword: '', storeName: '',
     taxRegime: 'PEQUENO_CONTRIBUYENTE', trialDays: '30',
   });
   const [error, setError] = useState<string | null>(null);
@@ -369,13 +369,14 @@ function OnboardModal({
           slug: form.slug || slugify(form.name),
           ownerUsername: form.ownerUsername || undefined,
           ownerPhone: form.ownerPhone || undefined,
+          ownerPassword: form.ownerPassword || undefined,
           trialDays: Number(form.trialDays),
         }),
       });
       onDone(
         `Cliente creado. Entregue estas credenciales al dueño:\n` +
-          `Usuario: ${res.owner.username}\nContraseña temporal: ${res.owner.temporaryPassword}\n` +
-          `(deberá cambiarla al primer ingreso — no volverá a mostrarse)`,
+          `Usuario: ${res.owner.username}\nContraseña: ${res.owner.temporaryPassword}\n` +
+          `(el dueño deberá cambiarla al primer ingreso — no volverá a mostrarse)`,
       );
     } catch (e2) {
       setError(e2 instanceof ApiError ? e2.message : 'Error al crear el cliente');
@@ -415,6 +416,13 @@ function OnboardModal({
           />
           <Field label="Correo del dueño" type="email" required value={form.ownerEmail} onChange={set('ownerEmail')} />
           <Field label="Teléfono" value={form.ownerPhone} onChange={set('ownerPhone')} />
+          <Field
+            label="Contraseña inicial"
+            placeholder="se genera una sola"
+            value={form.ownerPassword}
+            onChange={set('ownerPassword')}
+            hint="Póngala usted si va a dictarla por teléfono. El dueño la cambia al entrar."
+          />
           <Field label="Nombre de la tienda" required value={form.storeName} onChange={set('storeName')} />
           <Select label="Régimen fiscal" value={form.taxRegime} onChange={set('taxRegime')}>
             <option value="PEQUENO_CONTRIBUYENTE">Pequeño contribuyente (5%)</option>
