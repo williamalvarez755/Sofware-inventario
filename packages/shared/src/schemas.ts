@@ -93,6 +93,15 @@ export const tenantStatusSchema = z.object({
   reason: z.string().trim().min(3, 'Motivo requerido').max(300),
 });
 
+/**
+ * Eliminación definitiva. Se pide escribir el identificador del cliente:
+ * un botón de "¿seguro?" se acepta sin leer, escribir "dona-mari" no.
+ */
+export const tenantPurgeSchema = z.object({
+  confirmSlug: z.string().trim().min(1, 'Escriba el identificador del cliente'),
+  reason: z.string().trim().min(10, 'Explique por qué se elimina (mínimo 10 caracteres)').max(300),
+});
+
 // ---- Catálogo (Fase 1) ----
 /** Dinero SIEMPRE como entero en centavos (CLAUDE.md A9). */
 const centavos = z.number().int('Debe ser centavos enteros').min(0).max(999_999_999);

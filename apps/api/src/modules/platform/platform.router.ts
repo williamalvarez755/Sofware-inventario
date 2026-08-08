@@ -5,6 +5,7 @@ import {
   planSchema,
   subscriptionSchema,
   tenantOnboardSchema,
+  tenantPurgeSchema,
   tenantStatusSchema,
   twoFactorLoginSchema,
 } from '@minimarket/shared';
@@ -30,6 +31,7 @@ import {
   setTenantStatus,
   updatePlan,
 } from './platform.service.js';
+import { purgeTenant } from './purge.service.js';
 
 export const platformRouter = Router();
 
@@ -84,6 +86,22 @@ platformRouter.patch('/tenants/:id/status', validate(tenantStatusSchema), async 
       req.params.id as string,
       req.body.status,
       req.body.reason,
+      req.auth!.userId,
+      req,
+    ),
+  );
+});
+
+/**
+ * Eliminación DEFINITIVA de un cliente dado de baja. Irreversible: retira sus
+ * ventas, su caja y su kardex de la base. La baja normal —que bloquea el
+ * acceso y conserva el historial— es el PATCH de estado de arriba.
+ */
+platformRouter.delete('/tenants/:id', validate(tenantPurgeSchema), async (req, res) => {
+  res.json(
+    await purgeTenant(
+      req.params.id as string,
+      req.body.confirmSlug,
       req.auth!.userId,
       req,
     ),

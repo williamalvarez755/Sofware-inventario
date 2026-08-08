@@ -520,6 +520,24 @@ expense_categories 1─N expenses
 >
 > **147 pruebas en el API** (9 nuevas) y 11 en la web. Verificado en navegador: la pantalla obligatoria tapa la aplicación, el cambio renueva la sesión sin pedir volver a entrar, y el cambio voluntario desde la barra funciona.
 
+**Baja y eliminación de clientes — ✅ 2026-08-08**
+
+> Pedido del dueño: poder retirar a un cliente que ya no quiere el servicio. Se resolvió en **dos niveles distintos**, porque mezclarlos sería un error caro.
+>
+> **Dar de baja (`CANCELLED`)** — un clic con motivo. Bloquea el acceso al instante, conserva todo el historial y es reversible. Es lo correcto el 99 % de las veces: el cliente deja de pagar, deja de entrar, y si vuelve el mes siguiente sus datos están ahí. El estado ya existía en el modelo desde la Fase 0 pero **no era alcanzable desde la interfaz**.
+>
+> **Eliminar definitivamente** — solo aparece cuando el cliente ya está dado de baja, exige **escribir su identificador** (un botón de "¿está seguro?" se acepta sin leer; escribir `dona-mari` no) y un motivo de al menos 10 caracteres.
+>
+> Lo interesante es que esto choca de frente con D-007: los nueve disparadores de inmutabilidad rechazan cualquier borrado de ventas, caja, kardex y bitácora, y las llaves foráneas están en `RESTRICT`. Un `DELETE` era literalmente imposible, y eso es una virtud del sistema, no un defecto.
+>
+> La salida es **una puerta con llave, no un boquete** (D-046): los disparadores permiten el borrado solo si la transacción declara `app.purge_tenant` **y** el rol que ejecuta no es `app_runtime`. Las dos condiciones juntas significan que un fallo de la aplicación —o un atacante que llegue hasta el rol de ejecución— sigue sin poder borrar un solo movimiento. Hay una prueba dedicada a eso: el rol de runtime declara la variable y aun así recibe `append-only`.
+>
+> La bitácora de la eliminación se escribe **antes** de borrar y sin `tenant_id`, para que no se borre a sí misma: es la única huella que queda de que ese cliente existió.
+>
+> Una prueba compara la lista de tablas a purgar contra las que realmente tienen `tenant_id` en la base. Si mañana se agrega una tabla y nadie la suma, falla la prueba y no la purga de un cliente real. Ese chequeo ya encontró dos olvidos: `recovery_codes` y las unidades de medida propias del cliente.
+>
+> **155 pruebas en el API** (8 nuevas). Verificado en navegador: baja con aviso de historial conservado, el botón cambia a Eliminar, la confirmación equivocada deja el botón inhabilitado, y la eliminación retiró 28 registros dejando al tenant vecino intacto.
+
 **Post-lanzamiento (priorizar según clientes):** ver §10 Mejoras futuras.
 
 ---
@@ -593,6 +611,7 @@ expense_categories 1─N expenses
 | D-041 | 2026-08-01 | **Un solo formulario de ingreso** para el tendero y el super admin: el servidor resuelve el tipo de cuenta y responde con `scope`, y la aplicación encamina a cada quien | Pedido del dueño: sobraba el enlace de "¿administra la plataforma?". Nadie tiene que saber que existen dos puertas. No filtra nada: una cuenta inexistente y una contraseña incorrecta dan exactamente el mismo error, verificado por prueba. |
 | D-042 | 2026-08-01 | Tipografía **Outfit** (títulos) + **Manrope** (todo lo demás, incluidas las cifras con `tabular-nums`). Se descarta la monoespaciada para el dinero | Manrope alinea columnas igual de bien con cifras tabulares, pero un precio se lee como parte de la interfaz y no como salida de terminal. La monoespaciada anterior se sentía dura para lo que un cajero mira ocho horas al día. |
 | D-043 | 2026-08-01 | Marca propia (toldo de tienda) en lugar del icono de caja registradora | A 24–32 px la caja registradora se leía como un rectángulo con ruido dentro. Un toldo se reconoce al instante, dice "tienda" sin ambigüedad y toma el acento del tema. |
+| D-046 | 2026-08-08 | Retirar a un cliente son **dos operaciones distintas**: dar de baja (reversible, conserva el historial) y eliminar definitivamente (irreversible, solo sobre un cliente ya dado de baja y escribiendo su identificador). La purga abre los disparadores de inmutabilidad con `SET LOCAL app.purge_tenant`, y **solo** para roles distintos de `app_runtime` | Un `DELETE` era imposible por diseño (D-007), y esa imposibilidad es lo que hace auditable al sistema: no se podía quitar sin más. La variable de transacción limita la excepción a la operación que la declara, y excluir al rol de ejecución garantiza que ni un bug de la aplicación ni un atacante que llegue hasta él puedan borrar un movimiento. Separar los dos niveles evita que "el cliente se fue" —que pasa seguido— termine borrando historial que quizá haga falta. |
 | D-045 | 2026-08-08 | Cambiar la contraseña **revoca todas las sesiones** y devuelve uno nuevo a quien la cambió; exige la contraseña actual; una sesión de soporte no puede hacerlo. El super admin puede fijar la contraseña inicial del cliente | Cerrar sesiones es lo que la gente espera al cambiar su clave: si alguien más había quedado dentro, sale. Devolver un token nuevo evita expulsar también a quien hizo el cambio. Pedir la actual impide que una sesión olvidada en el mostrador se convierta en apropiación de la cuenta. Y que soporte no pueda cambiarla es la contraparte necesaria de la impersonación de solo lectura. |
 | D-044 | 2026-08-02 | El alta por escaneo usa un endpoint de coincidencia **exacta** (`/api/products/barcode/:code`), no la búsqueda del catálogo, y ofrece **vincular el código a un producto existente** además de crear uno nuevo | La búsqueda hace `contains` sobre el nombre: un código contenido en otro texto daría un falso positivo y crearía una ficha duplicada. Y quien cargó su catálogo por CSV no tiene códigos: sin la opción de vincular, cada escaneo de un producto que ya existe generaría un duplicado — exactamente el problema que el escáner debía evitar. |
 

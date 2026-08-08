@@ -51,6 +51,8 @@ export function PlatformDashboardPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [onboarding, setOnboarding] = useState(false);
   const [statusTarget, setStatusTarget] = useState<TenantRow | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<TenantRow | null>(null);
+  const [purgeTarget, setPurgeTarget] = useState<TenantRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [impersonateTarget, setImpersonateTarget] = useState<TenantRow | null>(null);
 
@@ -250,6 +252,23 @@ export function PlatformDashboardPage() {
                       >
                         {t.status === 'ACTIVE' ? 'Suspender' : 'Reactivar'}
                       </Button>
+                      {/* Dar de baja conserva el historial y es reversible;
+                          eliminar no. Por eso solo aparece el borrado cuando
+                          el cliente ya está dado de baja. */}
+                      {t.status !== 'CANCELLED' ? (
+                        <Button size="sm" variant="ghost" onClick={() => setCancelTarget(t)}>
+                          Dar de baja
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          icon="basura"
+                          onClick={() => setPurgeTarget(t)}
+                        >
+                          Eliminar
+                        </Button>
+                      )}
                     </span>
                   </Cell>
                 </Row>
@@ -294,6 +313,28 @@ export function PlatformDashboardPage() {
           onClose={() => setStatusTarget(null)}
           onDone={(msg) => {
             setStatusTarget(null);
+            setNotice(msg);
+            load();
+          }}
+        />
+      )}
+      {cancelTarget && (
+        <CancelModal
+          tenant={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={(msg) => {
+            setCancelTarget(null);
+            setNotice(msg);
+            load();
+          }}
+        />
+      )}
+      {purgeTarget && (
+        <PurgeModal
+          tenant={purgeTarget}
+          onClose={() => setPurgeTarget(null)}
+          onDone={(msg) => {
+            setPurgeTarget(null);
             setNotice(msg);
             load();
           }}
@@ -437,6 +478,139 @@ function OnboardModal({
         {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
         <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-5 w-full">
           Crear cliente
+        </Button>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Dar de baja: el cliente dejó de contratar el servicio. Bloquea el acceso al
+ * instante y conserva todo el historial. Es reversible —basta reactivarlo— y
+ * es lo que corresponde hacer el 99 % de las veces.
+ */
+function CancelModal({
+  tenant, onClose, onDone,
+}: {
+  tenant: TenantRow;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await platformApi(`/api/platform/tenants/${tenant.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'CANCELLED', reason }),
+      });
+      onDone(`"${tenant.name}" quedó dado de baja. Su historial se conserva.`);
+    } catch (e2) {
+      setError(e2 instanceof ApiError ? e2.message : 'Error');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Dar de baja a ${tenant.name}`}
+      description="Sus usuarios dejarán de poder ingresar de inmediato. Los datos se conservan y puede reactivarlo cuando quiera."
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <Field
+          label="Motivo" required minLength={3} autoFocus
+          value={reason} onChange={(e) => setReason(e.target.value)}
+          placeholder="ej. terminó el contrato"
+          hint="Obligatorio: queda en la bitácora."
+        />
+        {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+        <Button type="submit" variant="danger" size="lg" loading={busy} className="mt-5 w-full">
+          Dar de baja
+        </Button>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Eliminación definitiva. Irreversible: retira de la base las ventas, la caja
+ * y el kardex del cliente. Pide escribir el identificador porque un botón de
+ * "¿está seguro?" se acepta sin leer.
+ */
+function PurgeModal({
+  tenant, onClose, onDone,
+}: {
+  tenant: TenantRow;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [confirmSlug, setConfirmSlug] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const coincide = confirmSlug.trim() === tenant.slug;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!coincide) return;
+    setBusy(true);
+    try {
+      const res = await platformApi<{ total: number }>(
+        `/api/platform/tenants/${tenant.id}`,
+        { method: 'DELETE', body: JSON.stringify({ confirmSlug, reason }) },
+      );
+      onDone(`"${tenant.name}" fue eliminado: ${res.total} registro(s) retirados de la base.`);
+    } catch (e2) {
+      setError(e2 instanceof ApiError ? e2.message : 'Error al eliminar');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={`Eliminar a ${tenant.name}`} onClose={onClose}>
+      <form onSubmit={submit}>
+        <Notice tone="danger" icon="alerta">
+          Esto no se puede deshacer. Se borran sus ventas, su caja, su inventario y sus
+          usuarios. Si solo quiere dejar de cobrarle, dar de baja ya alcanza.
+        </Notice>
+
+        <Field
+          label={`Escriba "${tenant.slug}" para confirmar`}
+          required
+          autoFocus
+          value={confirmSlug}
+          onChange={(e) => setConfirmSlug(e.target.value)}
+          className="mt-4"
+          error={confirmSlug.length > 0 && !coincide ? 'No coincide' : undefined}
+        />
+        <Field
+          label="Motivo"
+          required
+          minLength={10}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="mt-3"
+          placeholder="ej. el cliente pidió que se borren sus datos"
+          hint="Queda en la bitácora de plataforma, que sobrevive al borrado."
+        />
+
+        {error && <div className="mt-4"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
+
+        <Button
+          type="submit"
+          variant="danger"
+          size="lg"
+          loading={busy}
+          disabled={!coincide}
+          className="mt-5 w-full"
+        >
+          Eliminar definitivamente
         </Button>
       </form>
     </Modal>
