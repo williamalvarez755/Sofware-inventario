@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
+    "build": "prisma generate && prisma migrate deploy",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -22,6 +23,8 @@
     "@minimarket/shared": "*",
     "@prisma/client": "^6.2.1",
     "argon2": "^0.41.1",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
@@ -43,9 +46,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/supertest": "^6.0.2",
     "pino-pretty": "^13.0.0",
-    "prisma": "^6.2.1",
     "supertest": "^7.0.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
   }
