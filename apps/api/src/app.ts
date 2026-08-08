@@ -52,7 +52,16 @@ export function createApp() {
       crossOriginResourcePolicy: { policy: 'same-site' },
     }),
   );
-  app.use(cors({ origin: env.CORS_ORIGIN.split(','), credentials: false }));
+  // El navegador manda el origen SIN barra final ni espacios. Configurar
+  // "https://mi-app.com/" es un error tan común como silencioso: no coincide
+  // con nada, el login falla con "no se pudo conectar" y no hay error en el
+  // servidor que lo delate. Se normaliza acá en vez de confiar en que quien
+  // despliega lo escriba perfecto.
+  const allowedOrigins = env.CORS_ORIGIN.split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter((o) => o.length > 0);
+  logger.info({ allowedOrigins }, 'CORS configurado');
+  app.use(cors({ origin: allowedOrigins, credentials: false }));
   app.use(express.json({ limit: '1mb' }));
   app.use(
     pinoHttp({
