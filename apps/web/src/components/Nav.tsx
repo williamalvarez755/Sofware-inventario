@@ -59,7 +59,9 @@ export function Nav() {
         </div>
       )}
 
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[hsl(var(--bg)/0.72)] backdrop-blur-2xl">
+      {/* glass-chrome: más difuminado que un panel, porque debajo pasa
+          contenido en movimiento y la barra tiene que seguir legible. */}
+      <header className="glass-chrome sticky top-0 z-30 rounded-none border-b border-[hsl(var(--border)/0.75)]">
         <div className="mx-auto flex max-w-[1400px] items-center gap-4 px-5 py-2.5">
           <Link to="/" className="flex shrink-0 items-center gap-2.5">
             <Marca size={32} />
@@ -80,7 +82,7 @@ export function Nav() {
                     'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
                     active
                       ? 'bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent-strong))]'
-                      : 'text-[hsl(var(--text-2))] hover:bg-white/[0.06] hover:text-[hsl(var(--text-1))]',
+                      : 'text-[hsl(var(--text-2))] hover:bg-[hsl(var(--text-1)/0.07)] hover:text-[hsl(var(--text-1))]',
                   )}
                 >
                   <Icon name={l.icon} size={16} />
@@ -164,7 +166,7 @@ function NotificationBell() {
       <button
         onClick={toggle}
         aria-label={`Notificaciones${unread > 0 ? ` (${unread} sin leer)` : ''}`}
-        className="relative inline-flex size-9 items-center justify-center rounded-lg text-[hsl(var(--text-2))] transition-colors hover:bg-white/[0.06] hover:text-[hsl(var(--text-1))]"
+        className="relative inline-flex size-9 items-center justify-center rounded-lg text-[hsl(var(--text-2))] transition-colors hover:bg-[hsl(var(--text-1)/0.07)] hover:text-[hsl(var(--text-1))]"
       >
         <Icon name="campana" size={18} />
         {unread > 0 && (
@@ -185,7 +187,7 @@ function NotificationBell() {
             {rows.map((n) => (
               <div
                 key={n.id}
-                className="rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.04]"
+                className="rounded-xl px-3 py-2.5 transition-colors hover:bg-[hsl(var(--text-1)/0.045)]"
               >
                 <p className="text-sm font-medium text-[hsl(var(--text-1))]">{n.title}</p>
                 {n.body && <p className="text-xs text-[hsl(var(--text-2))]">{n.body}</p>}
@@ -227,9 +229,15 @@ export function Page({
           wide ? 'max-w-[1400px]' : 'max-w-6xl',
         )}
       >
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-[hsl(var(--text-1))]">
+        {/* El título en la serif, con una regla de acento debajo: da el aire
+            de encabezado impreso y separa la página de sus controles. */}
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div className="relative">
+            <span
+              className="absolute -left-5 top-1.5 hidden h-7 w-1 rounded-full bg-[hsl(var(--accent))] sm:block"
+              aria-hidden
+            />
+            <h1 className="font-display text-[1.75rem] font-semibold leading-tight text-[hsl(var(--text-1))]">
               {title}
             </h1>
             {subtitle && <p className="mt-0.5 text-sm text-[hsl(var(--text-3))]">{subtitle}</p>}

@@ -203,7 +203,7 @@ export function ProductsPage() {
             <Cell mono align="right">{formatQ(BigInt(p.price))}</Cell>
             <Cell align="right">
               <span className="inline-flex items-center gap-2">
-                <span className={p.lowStock ? 'money font-semibold text-red-400' : 'money'}>
+                <span className={p.lowStock ? 'money font-semibold text-[hsl(var(--danger))]' : 'money'}>
                   {p.stockQty ?? '0'} {p.unit.code.toLowerCase()}
                 </span>
                 {p.lowStock && <Badge tone="danger">bajo</Badge>}
@@ -417,7 +417,7 @@ function ScanModal({
       {error && <div className="mt-3"><Notice tone="danger" icon="alerta">{error}</Notice></div>}
 
       {found && (
-        <Panel className="mt-3 border border-emerald-500/25 p-4">
+        <Panel className="mt-3 border border-[hsl(var(--ok)/0.28)] p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <Badge tone="ok" icon="cheque">Ya está registrado</Badge>
@@ -543,7 +543,7 @@ function VincularProducto({
             type="button"
             disabled={busy}
             onClick={() => onPick(p.id, p.name)}
-            className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06] disabled:opacity-50"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[hsl(var(--text-1)/0.07)] disabled:opacity-50"
           >
             <span className="min-w-0">
               <span className="block truncate text-sm text-[hsl(var(--text-1))]">{p.name}</span>
@@ -643,7 +643,7 @@ function CreateProductModal({
               onClick={() => setShowCamera(true)}
               aria-label="Escanear con la cámara"
               title="Escanear con la cámara"
-              className="mb-0 flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-[hsl(var(--text-2))] transition-colors hover:text-[hsl(var(--accent))]"
+              className="mb-0 flex size-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] text-[hsl(var(--text-2))] transition-colors hover:text-[hsl(var(--accent))]"
             >
               <Icon name="camara" size={19} />
             </button>
@@ -669,7 +669,7 @@ function CreateProductModal({
           />
         </div>
 
-        <fieldset className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
+        <fieldset className="mt-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.035)] p-4">
           <legend className="px-1 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]">
             Existencia inicial (opcional)
           </legend>
@@ -808,7 +808,7 @@ function KardexModal({
         <div className="max-h-[26rem] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[hsl(var(--surface-1))]">
-              <tr className="border-b border-white/[0.07] text-left text-[11px] uppercase tracking-wider text-[hsl(var(--text-3))]">
+              <tr className="border-b border-[hsl(var(--border)/0.85)] text-left text-[11px] uppercase tracking-wider text-[hsl(var(--text-3))]">
                 <th className="py-2 pr-3">Fecha</th>
                 <th className="py-2 pr-3">Movimiento</th>
                 <th className="py-2 text-right">Cantidad</th>
@@ -817,7 +817,7 @@ function KardexModal({
             </thead>
             <tbody>
               {rows.map((m) => (
-                <tr key={m.id} className="border-b border-white/[0.04] last:border-0">
+                <tr key={m.id} className="border-b border-[hsl(var(--border)/0.55)] last:border-0">
                   <td className="py-2 pr-3 text-xs text-[hsl(var(--text-3))]">
                     {new Date(m.createdAt).toLocaleString('es-GT', {
                       dateStyle: 'short',
@@ -834,7 +834,7 @@ function KardexModal({
                   </td>
                   <td
                     className={`money py-2 text-right font-medium ${
-                      Number(m.qty) < 0 ? 'text-red-400' : 'text-emerald-300'
+                      Number(m.qty) < 0 ? 'text-[hsl(var(--danger))]' : 'text-[hsl(var(--ok))]'
                     }`}
                   >
                     {Number(m.qty) > 0 ? '+' : ''}

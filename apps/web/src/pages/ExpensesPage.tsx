@@ -175,7 +175,7 @@ function NewExpenseModal({
           hint="Obligatoria: queda en la bitácora."
         />
         {openSessionId && (
-          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3.5">
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.035)] p-3.5">
             <input
               type="checkbox"
               checked={fromCash}

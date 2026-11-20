@@ -3,7 +3,7 @@
 > **Producto:** SaaS multi-tenant de inventario, punto de venta (POS), caja y proveedores para mini markets en Guatemala.
 > **Moneda:** Quetzal (GTQ, `Q`).
 > **Estado:** **Fases 0 a 7 COMPLETADAS** — producto listo para operar en tienda real, con interfaz definitiva. Ver §9 y el backlog en §10.
-> **Última actualización:** 2026-08-02.
+> **Última actualización:** 2026-11-20.
 >
 > Este archivo es la fuente de verdad del proyecto. Toda decisión técnica relevante debe registrarse aquí (sección *Registro de decisiones*) antes o inmediatamente después de implementarse.
 
@@ -538,6 +538,26 @@ expense_categories 1─N expenses
 >
 > **155 pruebas en el API** (8 nuevas). Verificado en navegador: baja con aviso de historial conservado, el botón cambia a Eliminar, la confirmación equivocada deja el botón inhabilitado, y la eliminación retiró 28 registros dejando al tenant vecino intacto.
 
+**Interfaz nueva: "Vidrio sobre caliza" — ✅ 2026-11-20**
+
+> El dueño pidió rehacer la interfaz desde cero: "quita esos colores oscuros tan feos", modo oscuro menos saturado, vidrio líquido, lienzo en blanco en cuanto a color.
+>
+> **El diagnóstico de por qué se veía mal** fue lo que definió el rediseño, y son dos números: el fondo estaba al **4,5 % de luminosidad** —casi negro— y el acento al **91 % de saturación**. El vidrio sobre negro no es vidrio: no hay nada detrás que difuminar, así que queda una caja gris. Y un naranja al 91 % sobre casi negro es un letrero de neón, que a las ocho horas de turno cansa.
+>
+> **Lo que se hizo:** el suelo subió a 14 % y las superficies a 22–31 %, de modo que el vidrio por fin tiene algo que refractar; los acentos bajaron a ~45 % de saturación; y los neutros pasaron a ser **cálidos** (matiz ~34°), que leen como piedra y papel en vez de como consola.
+>
+> **El material** se construye con tres capas de luz: un relleno en degradado vertical, el reflejo especular del canto superior, y un **aro de 1 px pintado con degradado y recortado con máscara** —brillante arriba, apagado abajo— que es lo que separa "panel translúcido" de "vidrio". Tres niveles: `glass` (paneles), `glass-chrome` (la barra fija, más difuminada porque debajo pasa contenido en movimiento) y `glass-raised` (modales, casi opacos: encima hay que leer y decidir). Detrás, tres halos enormes que derivan despacio más un contraluz cálido fijo, sin el cual todo quedaba teñido del acento y se veía monocromo.
+>
+> **Modo claro de verdad (D-047).** El eje de temas cambió: antes eran cuatro fondos oscuros que se diferenciaban en la temperatura —elegir entre cuatro negros—. Ahora es claro, oscuro o el del sistema, siguiendo al equipo en vivo. Un mostrador junto a una ventana al mediodía destroza cualquier interfaz oscura, y eso es media Guatemala.
+>
+> Para que el modo claro funcionara hubo que arreglar algo transversal: **103 colores fijos** repartidos en 14 archivos (`bg-white/[0.04]`, `text-emerald-300`, `text-red-400`…). Un velo blanco es invisible sobre papel y un rojo claro es ilegible sobre él. Se tokenizaron todos: los velos pasan a `hsl(var(--text-1)/α)`, que aclara en oscuro y oscurece en claro con el mismo token, y los estados a `--ok` / `--warn` / `--danger`, con su par de valores por modo.
+>
+> **Tipografía: Fraunces + Manrope (D-048).** Fraunces es una serif variable con eje óptico, y aparece solo en títulos y en las cifras protagonistas: le da a la aplicación el aire de un rótulo de tienda bien pintado en vez de un panel genérico. Manrope se queda en la interfaz y en el dinero, con cifras tabulares — ahí la legibilidad pesa más que el carácter.
+>
+> **Pantalla de ingreso** rehecha a dos columnas: es lo único que ve alguien que todavía no es cliente, así que dice qué hace el producto en vez de solo pedir datos. En teléfono la columna de presentación desaparece; ahí lo único que importa es entrar rápido.
+>
+> **Verificado en navegador** en los dos modos: ingreso, resumen del negocio, punto de venta, catálogo y el selector de apariencia (que muestra una miniatura de cada modo en vez de solo su nombre). 11 pruebas en la web y compilación de producción correctas.
+
 **Post-lanzamiento (priorizar según clientes):** ver §10 Mejoras futuras.
 
 ---
@@ -611,6 +631,8 @@ expense_categories 1─N expenses
 | D-041 | 2026-08-01 | **Un solo formulario de ingreso** para el tendero y el super admin: el servidor resuelve el tipo de cuenta y responde con `scope`, y la aplicación encamina a cada quien | Pedido del dueño: sobraba el enlace de "¿administra la plataforma?". Nadie tiene que saber que existen dos puertas. No filtra nada: una cuenta inexistente y una contraseña incorrecta dan exactamente el mismo error, verificado por prueba. |
 | D-042 | 2026-08-01 | Tipografía **Outfit** (títulos) + **Manrope** (todo lo demás, incluidas las cifras con `tabular-nums`). Se descarta la monoespaciada para el dinero | Manrope alinea columnas igual de bien con cifras tabulares, pero un precio se lee como parte de la interfaz y no como salida de terminal. La monoespaciada anterior se sentía dura para lo que un cajero mira ocho horas al día. |
 | D-043 | 2026-08-01 | Marca propia (toldo de tienda) en lugar del icono de caja registradora | A 24–32 px la caja registradora se leía como un rectángulo con ruido dentro. Un toldo se reconoce al instante, dice "tienda" sin ambigüedad y toma el acento del tema. |
+| D-048 | 2026-11-20 | Tipografía **Fraunces** (serif variable, solo títulos y cifras protagonistas) + **Manrope** (interfaz y dinero) | Una serif con eje óptico le da carácter de rótulo de tienda a un producto que competía en pantallas iguales a las de todos. Se limita a los títulos: en una tabla de precios la legibilidad pesa más que el carácter, y ahí Manrope con cifras tabulares sigue siendo lo correcto. |
+| D-047 | 2026-11-20 | El eje de temas pasa de "cuatro fondos oscuros" a **modo claro / oscuro / del sistema**, con acentos de croma bajo que traen un valor distinto por modo | Elegir entre cuatro negros no es una elección. Un modo claro sí cambia la vida de quien atiende junto a una ventana al mediodía. Y un acento que contrasta sobre basalto se pierde sobre papel, así que cada uno necesita su pareja: un solo valor para ambos modos obliga a sacrificar el contraste en uno de los dos. |
 | D-046 | 2026-08-08 | Retirar a un cliente son **dos operaciones distintas**: dar de baja (reversible, conserva el historial) y eliminar definitivamente (irreversible, solo sobre un cliente ya dado de baja y escribiendo su identificador). La purga abre los disparadores de inmutabilidad con `SET LOCAL app.purge_tenant`, y **solo** para roles distintos de `app_runtime` | Un `DELETE` era imposible por diseño (D-007), y esa imposibilidad es lo que hace auditable al sistema: no se podía quitar sin más. La variable de transacción limita la excepción a la operación que la declara, y excluir al rol de ejecución garantiza que ni un bug de la aplicación ni un atacante que llegue hasta él puedan borrar un movimiento. Separar los dos niveles evita que "el cliente se fue" —que pasa seguido— termine borrando historial que quizá haga falta. |
 | D-045 | 2026-08-08 | Cambiar la contraseña **revoca todas las sesiones** y devuelve uno nuevo a quien la cambió; exige la contraseña actual; una sesión de soporte no puede hacerlo. El super admin puede fijar la contraseña inicial del cliente | Cerrar sesiones es lo que la gente espera al cambiar su clave: si alguien más había quedado dentro, sale. Devolver un token nuevo evita expulsar también a quien hizo el cambio. Pedir la actual impide que una sesión olvidada en el mostrador se convierta en apropiación de la cuenta. Y que soporte no pueda cambiarla es la contraparte necesaria de la impersonación de solo lectura. |
 | D-044 | 2026-08-02 | El alta por escaneo usa un endpoint de coincidencia **exacta** (`/api/products/barcode/:code`), no la búsqueda del catálogo, y ofrece **vincular el código a un producto existente** además de crear uno nuevo | La búsqueda hace `contains` sobre el nombre: un código contenido en otro texto daría un falso positivo y crearía una ficha duplicada. Y quien cargó su catálogo por CSV no tiene códigos: sin la opción de vincular, cada escaneo de un producto que ya existe generaría un duplicado — exactamente el problema que el escáner debía evitar. |

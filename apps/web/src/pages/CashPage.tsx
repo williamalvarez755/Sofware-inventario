@@ -142,7 +142,7 @@ export function CashPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                  <span className="size-1.5 rounded-full bg-[hsl(var(--ok))]" />
                   <h2 className="font-display text-[15px] font-semibold text-[hsl(var(--text-1))]">
                     Turno abierto
                   </h2>
@@ -180,7 +180,7 @@ export function CashPage() {
 
             <div className="mt-5">
               <SectionTitle>Movimientos</SectionTitle>
-              <div className="max-h-80 divide-y divide-white/[0.05] overflow-y-auto">
+              <div className="max-h-80 divide-y divide-[hsl(var(--border)/0.65)] overflow-y-auto">
                 {session.movements.map((m) => {
                   const negative = BigInt(m.amount) < 0n;
                   return (
@@ -196,7 +196,7 @@ export function CashPage() {
                       <span
                         className={cx(
                           'money shrink-0 text-sm font-semibold',
-                          negative ? 'text-red-400' : 'text-emerald-300',
+                          negative ? 'text-[hsl(var(--danger))]' : 'text-[hsl(var(--ok))]',
                         )}
                       >
                         {formatQ(BigInt(m.amount))}
@@ -210,7 +210,7 @@ export function CashPage() {
 
           <Panel className="p-5">
             <SectionTitle>Ventas del turno</SectionTitle>
-            <div className="max-h-[28rem] divide-y divide-white/[0.05] overflow-y-auto">
+            <div className="max-h-[28rem] divide-y divide-[hsl(var(--border)/0.65)] overflow-y-auto">
               {sales.length === 0 && <Empty icon="punto-venta">Sin ventas aún</Empty>}
               {sales.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-3 py-2.5">

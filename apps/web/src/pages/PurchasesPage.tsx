@@ -238,7 +238,7 @@ function NewPurchaseModal({
                 type="button"
                 key={p.id}
                 onClick={() => addLine(p)}
-                className="flex w-full justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.06]"
+                className="flex w-full justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[hsl(var(--text-1)/0.07)]"
               >
                 <span className="text-[hsl(var(--text-1))]">{p.name}</span>
                 <span className="text-xs text-[hsl(var(--text-3))]">{p.sku}</span>
@@ -249,7 +249,7 @@ function NewPurchaseModal({
 
         <div className="mt-3 max-h-64 overflow-y-auto">
           {lines.map((l, idx) => (
-            <div key={l.product.id} className="flex items-center gap-2 border-b border-white/[0.05] py-2 last:border-0">
+            <div key={l.product.id} className="flex items-center gap-2 border-b border-[hsl(var(--border)/0.65)] py-2 last:border-0">
               <span className="min-w-0 flex-1 truncate text-sm text-[hsl(var(--text-1))]">
                 {l.product.name}
               </span>
@@ -259,7 +259,7 @@ function NewPurchaseModal({
                   setLines((ls) => ls.map((x, i) => (i === idx ? { ...x, qty: Number(e.target.value) } : x)))
                 }
                 aria-label={`Cantidad de ${l.product.name}`}
-                className="money h-9 w-20 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 text-center text-sm text-[hsl(var(--text-1))]"
+                className="money h-9 w-20 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] px-2 text-center text-sm text-[hsl(var(--text-1))]"
               />
               <div className="flex items-center gap-1">
                 <span className="text-xs text-[hsl(var(--text-3))]">Q</span>
@@ -269,7 +269,7 @@ function NewPurchaseModal({
                     setLines((ls) => ls.map((x, i) => (i === idx ? { ...x, cost: e.target.value } : x)))
                   }
                   aria-label={`Costo unitario de ${l.product.name}`}
-                  className="money h-9 w-24 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 text-right text-sm text-[hsl(var(--text-1))]"
+                  className="money h-9 w-24 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] px-2 text-right text-sm text-[hsl(var(--text-1))]"
                 />
               </div>
               <IconButton
@@ -286,7 +286,7 @@ function NewPurchaseModal({
           )}
         </div>
 
-        <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-3">
+        <div className="mt-3 flex items-center justify-between border-t border-[hsl(var(--border)/0.85)] pt-3">
           <span className="text-sm text-[hsl(var(--text-2))]">Total</span>
           <span className="money text-xl font-semibold text-[hsl(var(--text-1))]">
             {formatQ(total)}

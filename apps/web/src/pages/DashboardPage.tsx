@@ -168,42 +168,46 @@ export function DashboardPage() {
         <>
           {/* Cifra protagonista: lo primero que un dueño quiere saber al abrir
               la aplicación es cuánto vendió y cuánto le quedó. */}
-          <Panel className="relative overflow-hidden p-6">
+          <Panel className="surgir relative overflow-hidden p-7">
+            {/* Dos focos detrás del vidrio: el panel se siente iluminado desde
+                arriba, no pintado de un color. */}
             <div
-              className="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full opacity-[0.16] blur-3xl"
+              className="pointer-events-none absolute -right-20 -top-32 size-80 rounded-full opacity-25 blur-3xl"
               style={{ background: 'hsl(var(--accent))' }}
               aria-hidden
             />
-            <div className="relative flex flex-wrap items-end justify-between gap-6">
+            <div
+              className="pointer-events-none absolute -left-24 bottom-[-6rem] size-64 rounded-full opacity-[0.12] blur-3xl"
+              style={{ background: 'hsl(26 70% 55%)' }}
+              aria-hidden
+            />
+            <div className="relative flex flex-wrap items-end justify-between gap-7">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
-                  Vendido en el periodo
-                </p>
-                <p className="money mt-2 text-[46px] font-bold leading-none text-[hsl(var(--text-1))] sm:text-[56px]">
+                <p className="rotulo">Vendido en el periodo</p>
+                <p className="cifra-hero mt-3 text-[clamp(2.75rem,7vw,4.25rem)] font-semibold text-[hsl(var(--text-1))]">
                   {formatQ(BigInt(data.salesTotal))}
                 </p>
-                <p className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[hsl(var(--text-2))]">
+                <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[hsl(var(--text-2))]">
                   <span>{data.salesCount} venta(s)</span>
+                  <span className="text-[hsl(var(--text-3))]">·</span>
                   <span className="text-[hsl(var(--text-3))]">
                     Ticket promedio {formatQ(BigInt(data.ticketAverage))}
                   </span>
                 </p>
               </div>
-              <div className="rounded-2xl border border-[hsl(var(--accent)/0.28)] bg-[hsl(var(--accent)/0.09)] px-5 py-3.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--accent-strong))]">
-                  Le quedó
-                </p>
-                <p className="money mt-1 text-[28px] font-bold leading-none text-[hsl(var(--accent-strong))]">
+              <div className="rounded-2xl border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.1)] px-6 py-4 shadow-[inset_0_1px_0_hsl(var(--glass-tint)/calc(var(--glass-spec)*1.2))]">
+                <p className="rotulo text-[hsl(var(--accent-strong))]">Le quedó</p>
+                <p className="cifra-hero mt-1.5 text-[2rem] font-semibold text-[hsl(var(--accent-strong))]">
                   {formatQ(BigInt(data.profitTotal))}
                 </p>
-                <p className="mt-1 text-xs text-[hsl(var(--text-3))]">
-                  {margen !== null ? `${margen}% de margen` : 'utilidad bruta'}
+                <p className="mt-1.5 text-xs text-[hsl(var(--text-3))]">
+                  {margen !== null ? `${margen} % de margen` : 'utilidad bruta'}
                 </p>
               </div>
             </div>
           </Panel>
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3.5 grid gap-3.5 sm:grid-cols-3">
             <Stat
               label="Gastos"
               value={formatQ(BigInt(data.expensesTotal))}
@@ -246,7 +250,7 @@ export function DashboardPage() {
               <SectionTitle
                 action={
                   low.length > 0 ? (
-                    <span className="rounded-full bg-red-500/12 px-2 py-0.5 text-[11px] font-semibold text-red-400">
+                    <span className="rounded-full bg-[hsl(var(--danger)/0.13)] px-2 py-0.5 text-[11px] font-semibold text-[hsl(var(--danger))]">
                       {low.length}
                     </span>
                   ) : undefined
@@ -265,19 +269,19 @@ export function DashboardPage() {
                     return (
                       <div
                         key={`${r.store}-${r.productId}`}
-                        className="rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.04]"
+                        className="rounded-xl px-3 py-2.5 transition-colors hover:bg-[hsl(var(--text-1)/0.045)]"
                       >
                         <div className="flex items-baseline justify-between gap-3">
                           <p className="truncate text-sm text-[hsl(var(--text-1))]">{r.name}</p>
-                          <span className="money shrink-0 text-sm font-semibold text-red-400">
+                          <span className="money shrink-0 text-sm font-semibold text-[hsl(var(--danger))]">
                             {r.stockQty}
                           </span>
                         </div>
                         {/* Barra proporcional: se ve de un vistazo qué tan
                             urgente es cada reposición. */}
-                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[hsl(var(--text-1)/0.08)]">
                           <div
-                            className="h-full rounded-full bg-red-400/80"
+                            className="h-full rounded-full bg-[hsl(var(--danger)/0.85)]"
                             style={{ width: `${Math.max(6, ratio * 100)}%` }}
                           />
                         </div>

@@ -119,10 +119,10 @@ export function CameraScanner({
   }, [onDetected]);
 
   return (
-    <div className="fixed inset-0 z-30 flex flex-col bg-black/90 p-4">
+    <div className="fixed inset-0 z-30 flex flex-col bg-[hsl(var(--bg-deep)/0.93)] p-4">
       <div className="flex items-center justify-between text-white">
         <span className="font-semibold">Escanear con la cámara</span>
-        <button onClick={onClose} className="rounded-lg bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20">
+        <button onClick={onClose} className="rounded-lg bg-[hsl(var(--text-1)/0.1)] px-3 py-1.5 text-sm hover:bg-[hsl(var(--text-1)/0.18)]">
           Cerrar
         </button>
       </div>
@@ -137,12 +137,12 @@ export function CameraScanner({
         />
         {/* Guía visual: el cajero apunta el código dentro del marco */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-28 w-4/5 rounded-lg border-2 border-emerald-400/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+          <div className="h-28 w-4/5 rounded-lg border-2 border-[hsl(var(--ok)/0.85)] shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
         </div>
       </div>
 
       {error ? (
-        <p className="mx-auto mt-4 max-w-md rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-700">
+        <p className="mx-auto mt-4 max-w-md rounded-lg bg-[hsl(var(--danger)/0.12)] px-3 py-2 text-center text-sm text-[hsl(var(--danger))]">
           {error}
         </p>
       ) : (

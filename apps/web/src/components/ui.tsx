@@ -25,14 +25,25 @@ const cx = (...parts: (string | false | null | undefined)[]) =>
 
 type Variant = 'primary' | 'ghost' | 'outline' | 'danger';
 
+/**
+ * El primario lleva un reflejo interior en el canto superior y un halo del
+ * propio acento debajo: es el mismo truco del vidrio aplicado a una pieza
+ * sólida, y es lo que hace que el botón parezca tener volumen en vez de ser
+ * un rectángulo de color.
+ */
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-[hsl(var(--accent))] text-[hsl(var(--accent-ink))] hover:bg-[hsl(var(--accent-strong))] shadow-[0_6px_20px_-8px_hsl(var(--accent)/0.7)]',
-  ghost: 'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text-1))] hover:bg-white/[0.06]',
+    'bg-[hsl(var(--accent))] text-[hsl(var(--accent-ink))] ' +
+    'shadow-[inset_0_1px_0_hsl(0_0%_100%/0.28),0_6px_18px_-8px_hsl(var(--accent)/0.75)] ' +
+    'hover:bg-[hsl(var(--accent-strong))] hover:shadow-[inset_0_1px_0_hsl(0_0%_100%/0.34),0_10px_26px_-10px_hsl(var(--accent)/0.9)]',
+  ghost:
+    'text-[hsl(var(--text-2))] hover:text-[hsl(var(--text-1))] hover:bg-[hsl(var(--text-1)/0.07)]',
   outline:
-    'border border-white/10 bg-white/[0.03] text-[hsl(var(--text-1))] hover:bg-white/[0.07] hover:border-white/20',
+    'border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.035)] text-[hsl(var(--text-1))] ' +
+    'shadow-[inset_0_1px_0_hsl(var(--glass-tint)/calc(var(--glass-spec)*0.8))] ' +
+    'hover:bg-[hsl(var(--text-1)/0.08)] hover:border-[hsl(var(--text-1)/0.28)]',
   danger:
-    'border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 hover:border-red-500/50',
+    'border border-[hsl(var(--danger)/0.32)] bg-[hsl(var(--danger)/0.11)] text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger)/0.2)] hover:border-[hsl(var(--danger)/0.5)]',
 };
 
 const SIZES = {
@@ -62,8 +73,8 @@ export function Button({
       {...props}
       disabled={props.disabled || loading}
       className={cx(
-        'inline-flex items-center justify-center font-medium transition-all duration-150',
-        'active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40',
+        'inline-flex items-center justify-center font-semibold transition-all duration-200',
+        'active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40',
         SIZES[size],
         VARIANTS[variant],
         className,
@@ -156,10 +167,16 @@ export function SectionTitle({
 
 // ─────────────────────────────── Campos ───────────────────────────────
 
+/** El campo hundido: sombra interior arriba, como si el vidrio se rebajara.
+ *  Al enfocar aparece un halo del acento — se ve dónde está el cursor desde
+ *  el otro lado del mostrador. */
 const FIELD_BASE =
-  'w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 text-sm text-[hsl(var(--text-1))] ' +
-  'placeholder:text-[hsl(var(--text-3))] transition-colors duration-150 ' +
-  'hover:border-white/[0.14] focus:border-[hsl(var(--accent))] focus:bg-white/[0.06] focus:outline-none';
+  'w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] px-3.5 text-sm text-[hsl(var(--text-1))] ' +
+  'placeholder:text-[hsl(var(--text-3))] transition-all duration-200 ' +
+  'shadow-[inset_0_1px_2px_hsl(var(--shadow-color)/calc(var(--shadow-strength)*0.5))] ' +
+  'hover:border-[hsl(var(--text-1)/0.22)] ' +
+  'focus:border-[hsl(var(--accent))] focus:bg-[hsl(var(--text-1)/0.07)] focus:outline-none ' +
+  'focus:shadow-[0_0_0_3px_hsl(var(--accent)/0.16)]';
 
 export function Field({
   label,
@@ -192,11 +209,11 @@ export function Field({
           {...props}
           id={id}
           aria-invalid={Boolean(error) || undefined}
-          className={cx(FIELD_BASE, 'h-11', icon && 'pl-10', error && 'border-red-500/60')}
+          className={cx(FIELD_BASE, 'h-11', icon && 'pl-10', error && 'border-[hsl(var(--danger)/0.6)]')}
         />
       </div>
       {error ? (
-        <p className="mt-1.5 text-xs text-red-400">{error}</p>
+        <p className="mt-1.5 text-xs text-[hsl(var(--danger))]">{error}</p>
       ) : (
         hint && <p className="mt-1.5 text-xs text-[hsl(var(--text-3))]">{hint}</p>
       )}
@@ -237,11 +254,11 @@ export function Select({
 // ─────────────────────────────── Distintivos ───────────────────────────────
 
 const TONES = {
-  neutral: 'bg-white/[0.07] text-[hsl(var(--text-2))] border-white/10',
+  neutral: 'bg-[hsl(var(--text-1)/0.08)] text-[hsl(var(--text-2))] border-[hsl(var(--border))]',
   accent: 'bg-[hsl(var(--accent)/0.16)] text-[hsl(var(--accent-strong))] border-[hsl(var(--accent)/0.3)]',
-  ok: 'bg-emerald-500/12 text-emerald-300 border-emerald-500/25',
-  warn: 'bg-amber-500/12 text-amber-300 border-amber-500/25',
-  danger: 'bg-red-500/12 text-red-300 border-red-500/25',
+  ok: 'bg-[hsl(var(--ok)/0.13)] text-[hsl(var(--ok))] border-[hsl(var(--ok)/0.28)]',
+  warn: 'bg-[hsl(var(--warn)/0.13)] text-[hsl(var(--warn))] border-[hsl(var(--warn)/0.28)]',
+  danger: 'bg-[hsl(var(--danger)/0.13)] text-[hsl(var(--danger))] border-[hsl(var(--danger)/0.28)]',
 } as const;
 
 export function Badge({
@@ -334,7 +351,7 @@ export function Modal({
   return createPortal(
     <ModalCtx.Provider value={onClose}>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[hsl(var(--bg-deep)/0.6)] p-4 backdrop-blur-md"
         onClick={onClose}
       >
         <div
@@ -345,13 +362,13 @@ export function Modal({
           aria-label={title}
           onClick={(e) => e.stopPropagation()}
           className={cx(
-            'surgir glass my-auto w-full rounded-2xl p-6 outline-none',
+            'surgir glass-raised my-auto w-full rounded-[1.25rem] p-6 outline-none',
             wide ? 'max-w-2xl' : 'max-w-md',
           )}
         >
-          <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display text-lg font-semibold text-[hsl(var(--text-1))]">
+              <h2 className="font-display text-[1.35rem] font-semibold leading-tight text-[hsl(var(--text-1))]">
                 {title}
               </h2>
               {description && (
@@ -376,15 +393,9 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/[0.07]">
+            <tr className="border-b border-[hsl(var(--border)/0.85)] bg-[hsl(var(--text-1)/0.025)]">
               {head.map((h, i) => (
-                <th
-                  key={i}
-                  className={cx(
-                    'px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]',
-                    i === 0 ? 'text-left' : typeof h === 'string' && /^[A-ZÁÉÍÓÚ]/.test(h) ? 'text-left' : 'text-left',
-                  )}
-                >
+                <th key={i} className="rotulo px-4 py-3 text-left">
                   {h}
                 </th>
               ))}
@@ -402,8 +413,8 @@ export function Row({ children, onClick }: { children: ReactNode; onClick?: () =
     <tr
       onClick={onClick}
       className={cx(
-        'border-b border-white/[0.04] last:border-0 transition-colors',
-        onClick ? 'cursor-pointer hover:bg-white/[0.04]' : 'hover:bg-white/[0.025]',
+        'border-b border-[hsl(var(--border)/0.55)] last:border-0 transition-colors',
+        onClick ? 'cursor-pointer hover:bg-[hsl(var(--text-1)/0.045)]' : 'hover:bg-[hsl(var(--text-1)/0.03)]',
       )}
     >
       {children}
@@ -475,30 +486,28 @@ export function Stat({
     tone === 'accent'
       ? 'text-[hsl(var(--accent-strong))]'
       : tone === 'danger'
-        ? 'text-red-400'
+        ? 'text-[hsl(var(--danger))]'
         : 'text-[hsl(var(--text-1))]';
   const pastilla =
     tone === 'accent'
       ? 'bg-[hsl(var(--accent)/0.16)] text-[hsl(var(--accent-strong))]'
       : tone === 'danger'
-        ? 'bg-red-500/12 text-red-400'
-        : 'bg-white/[0.06] text-[hsl(var(--text-2))]';
+        ? 'bg-[hsl(var(--danger)/0.13)] text-[hsl(var(--danger))]'
+        : 'bg-[hsl(var(--text-1)/0.07)] text-[hsl(var(--text-2))]';
 
   return (
-    <Panel className="group relative overflow-hidden p-4">
+    <Panel className="group relative overflow-hidden p-4 transition-transform duration-300 hover:-translate-y-0.5">
       {spark && spark.length > 1 && <Sparkline points={spark} tone={tone} />}
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
-            {label}
-          </p>
-          <p className={cx('money mt-2 text-[27px] font-bold leading-none', color)}>{value}</p>
+          <p className="rotulo">{label}</p>
+          <p className={cx('money mt-2 text-[27px] font-extrabold leading-none', color)}>{value}</p>
           {hint && <p className="mt-2 text-xs text-[hsl(var(--text-3))]">{hint}</p>}
         </div>
         {icon && (
           <span
             className={cx(
-              'flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105',
+              'flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3',
               pastilla,
             )}
           >
@@ -517,8 +526,7 @@ function Sparkline({ points, tone }: { points: number[]; tone: 'neutral' | 'acce
   const H = 30;
   const step = points.length > 1 ? W / (points.length - 1) : W;
   const coords = points.map((p, i) => `${i * step},${H - (p / max) * H}`);
-  const stroke =
-    tone === 'danger' ? 'rgb(248 113 113)' : 'hsl(var(--accent))';
+  const stroke = tone === 'danger' ? 'hsl(var(--danger))' : 'hsl(var(--accent))';
 
   return (
     <svg

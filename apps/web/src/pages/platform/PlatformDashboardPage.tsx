@@ -81,7 +81,7 @@ export function PlatformDashboardPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[hsl(var(--bg)/0.72)] backdrop-blur-2xl">
+      <header className="sticky top-0 z-30 border-b border-[hsl(var(--border)/0.75)] bg-[hsl(var(--bg)/0.72)] backdrop-blur-2xl">
         <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-5 py-3">
           <Marca size={32} />
           <span className="font-display text-[15px] font-semibold text-[hsl(var(--text-1))]">
@@ -126,7 +126,7 @@ export function PlatformDashboardPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
                     Ingreso mensual recurrente
                   </p>
-                  <p className="money mt-2 text-[46px] font-bold leading-none text-[hsl(var(--accent-strong))] sm:text-[56px]">
+                  <p className="cifra-hero mt-3 text-[clamp(2.75rem,7vw,4.25rem)] font-semibold text-[hsl(var(--accent-strong))]">
                     {formatQ(BigInt(metrics.revenue.mrr))}
                   </p>
                   <p className="mt-2.5 text-sm text-[hsl(var(--text-2))]">
@@ -136,11 +136,11 @@ export function PlatformDashboardPage() {
                     </span>
                   </p>
                 </div>
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-5 py-3.5">
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] px-5 py-3.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--text-3))]">
                     Volumen transado (30 d)
                   </p>
-                  <p className="money mt-1 text-[28px] font-bold leading-none text-[hsl(var(--text-1))]">
+                  <p className="cifra-hero mt-1.5 text-[2rem] font-semibold text-[hsl(var(--text-1))]">
                     {formatQ(BigInt(metrics.volume.volume30d))}
                   </p>
                   <p className="mt-1 text-xs text-[hsl(var(--text-3))]">
@@ -182,7 +182,7 @@ export function PlatformDashboardPage() {
                     <button
                       key={a.id}
                       onClick={() => setDetailId(a.id)}
-                      className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-[hsl(var(--text-2))] transition-colors hover:bg-white/[0.08]"
+                      className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] px-3 py-1.5 text-xs text-[hsl(var(--text-2))] transition-colors hover:bg-[hsl(var(--text-1)/0.09)]"
                     >
                       <strong className="text-[hsl(var(--text-1))]">{a.name}</strong> — {a.reason}
                     </button>
@@ -203,7 +203,7 @@ export function PlatformDashboardPage() {
                 'rounded-xl px-3.5 py-2 text-sm font-medium transition-colors',
                 tab === t
                   ? 'bg-[hsl(var(--accent))] text-[hsl(var(--accent-ink))]'
-                  : 'text-[hsl(var(--text-2))] hover:bg-white/[0.06]',
+                  : 'text-[hsl(var(--text-2))] hover:bg-[hsl(var(--text-1)/0.07)]',
               )}
             >
               {t === 'tenants' ? 'Clientes' : 'Planes'}
@@ -821,7 +821,7 @@ function TenantDetailModal({
                   : '—',
               ],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-3">
+              <div key={label} className="rounded-xl border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--text-1)/0.035)] p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]">
                   {label}
                 </p>
@@ -841,7 +841,7 @@ function TenantDetailModal({
             <SectionTitle>Historial de suscripciones</SectionTitle>
             <div className="max-h-40 overflow-y-auto">
               {detail.subscriptions.map((s) => (
-                <div key={s.id} className="flex justify-between gap-3 border-b border-white/[0.05] py-2 text-sm last:border-0">
+                <div key={s.id} className="flex justify-between gap-3 border-b border-[hsl(var(--border)/0.65)] py-2 text-sm last:border-0">
                   <span className="text-[hsl(var(--text-2))]">
                     {s.plan.name} · {new Date(s.periodStart).toLocaleDateString('es-GT')} →{' '}
                     {new Date(s.periodEnd).toLocaleDateString('es-GT')}
@@ -857,7 +857,7 @@ function TenantDetailModal({
             </div>
           </div>
 
-          <form onSubmit={registerPayment} className="mt-5 rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+          <form onSubmit={registerPayment} className="mt-5 rounded-xl border border-[hsl(var(--border)/0.85)] bg-[hsl(var(--text-1)/0.035)] p-4">
             <SectionTitle>Registrar pago / renovar</SectionTitle>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Select label="Plan" value={planCode} onChange={(e) => setPlanCode(e.target.value)}>

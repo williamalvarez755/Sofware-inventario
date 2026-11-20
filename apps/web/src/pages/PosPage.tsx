@@ -254,7 +254,7 @@ export function PosPage() {
                     <button
                       key={p.id}
                       onClick={() => addToCart(p)}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[hsl(var(--text-1)/0.07)]"
                     >
                       <span>
                         <span className="text-sm font-medium text-[hsl(var(--text-1))]">{p.name}</span>
@@ -275,7 +275,7 @@ export function PosPage() {
                 {cart.map((line) => (
                   <div
                     key={line.product.id}
-                    className="flex items-center gap-3 border-b border-white/[0.05] px-4 py-3 last:border-0"
+                    className="flex items-center gap-3 border-b border-[hsl(var(--border)/0.65)] px-4 py-3 last:border-0"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-[hsl(var(--text-1))]">
@@ -299,7 +299,7 @@ export function PosPage() {
                         value={line.qty}
                         onChange={(e) => setQty(line.product.id, Number(e.target.value))}
                         aria-label={`Cantidad de ${line.product.name}`}
-                        className="money h-9 w-16 rounded-lg border border-white/[0.08] bg-white/[0.04] text-center text-sm text-[hsl(var(--text-1))]"
+                        className="money h-9 w-16 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--text-1)/0.045)] text-center text-sm text-[hsl(var(--text-1))]"
                       />
                       <IconButton
                         icon="mas"
@@ -331,7 +331,7 @@ export function PosPage() {
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--text-3))]">
-                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                  <span className="size-1.5 rounded-full bg-[hsl(var(--ok))]" />
                   Caja abierta · {session.salesCount} venta(s)
                 </div>
                 <p className="money mt-1 text-xs text-[hsl(var(--text-3))]">
@@ -339,7 +339,7 @@ export function PosPage() {
                 </p>
 
                 <p className="mt-5 text-sm text-[hsl(var(--text-2))]">Total a cobrar</p>
-                <p className="money mt-1 text-[44px] font-semibold leading-none text-[hsl(var(--text-1))]">
+                <p className="cifra-hero mt-1.5 text-[2.9rem] font-semibold text-[hsl(var(--text-1))]">
                   {formatQ(total)}
                 </p>
                 <p className="mt-1.5 text-xs text-[hsl(var(--text-3))]">
@@ -480,7 +480,7 @@ function PayModal({
                 'rounded-xl border py-2.5 text-sm font-medium transition-all',
                 method === m
                   ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.14)] text-[hsl(var(--accent-strong))]'
-                  : 'border-white/[0.08] text-[hsl(var(--text-2))] hover:bg-white/[0.05]',
+                  : 'border-[hsl(var(--border))] text-[hsl(var(--text-2))] hover:bg-[hsl(var(--text-1)/0.055)]',
               )}
             >
               {label}
@@ -583,9 +583,9 @@ export function ReceiptOverlay({ data, onClose }: { data: ReceiptData; onClose: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[hsl(var(--bg-deep)/0.72)] p-4 backdrop-blur-sm">
       <div className="surgir my-auto">
-        <div className="mb-3 flex items-center justify-center gap-2 text-emerald-300 print:hidden">
+        <div className="mb-3 flex items-center justify-center gap-2 text-[hsl(var(--ok))] print:hidden">
           <Icon name="cheque" size={18} strokeWidth={2.2} />
           <span className="text-sm font-medium">Venta registrada</span>
         </div>
