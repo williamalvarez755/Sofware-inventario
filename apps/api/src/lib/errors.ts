@@ -70,6 +70,25 @@ function prismaStatus(err: unknown): { status: number; code: string; message: st
   }
 }
 
+/**
+ * Fallos de CONEXIÓN con la base. Se distinguen del resto porque no son culpa
+ * de la petición ni un bug de dominio: el servicio simplemente no puede hablar
+ * con su base. Sin este mapeo salen como "Error interno del servidor", que es
+ * justo el mensaje que más tiempo hace perder — apunta a un bug cuando en
+ * realidad es una variable de entorno mal puesta o la base caída.
+ */
+function connectionStatus(err: unknown): { status: number; code: string; message: string } | null {
+  if (!(err instanceof Prisma.PrismaClientInitializationError)) return null;
+  const autenticacion = err.errorCode === 'P1000';
+  return {
+    status: 503,
+    code: autenticacion ? 'DB_AUTH_FAILED' : 'DB_UNREACHABLE',
+    message: autenticacion
+      ? 'El servidor no pudo autenticarse contra la base de datos. Revise las credenciales configuradas.'
+      : 'El servidor no puede comunicarse con la base de datos en este momento.',
+  };
+}
+
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
   const parserError = bodyParserStatus(err);
   if (parserError) {
@@ -90,6 +109,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
   if (err instanceof AppError) {
     res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    return;
+  }
+  const connectionError = connectionStatus(err);
+  if (connectionError) {
+    logger.error({ err, url: req.originalUrl }, 'Fallo de conexion con la base de datos');
+    res.status(connectionError.status).json({
+      error: { code: connectionError.code, message: connectionError.message },
+    });
     return;
   }
   const prismaError = prismaStatus(err);
