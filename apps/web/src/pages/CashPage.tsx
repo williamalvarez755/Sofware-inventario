@@ -3,7 +3,7 @@ import { formatQ, toCentavos } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { Icon } from '../components/Icon';
-import { Page } from '../components/Nav';
+import { Page } from '../components/AppShell';
 import type { ReceiptData } from '../components/Receipt';
 import {
   Badge,
@@ -137,7 +137,7 @@ export function CashPage() {
       )}
 
       {session && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           <Panel className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>

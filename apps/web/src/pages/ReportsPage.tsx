@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatQ } from '@minimarket/shared';
 import { api, ApiError, downloadCsv } from '../api/client';
-import { Page } from '../components/Nav';
+import { Page } from '../components/AppShell';
 import { Button, Cell, Empty, Field, Notice, Row, Select, Table } from '../components/ui';
 
 interface StoreRow { id: string; name: string }

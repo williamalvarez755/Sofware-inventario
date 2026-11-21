@@ -4,7 +4,7 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { CameraScanner } from '../components/CameraScanner';
 import { Icon } from '../components/Icon';
-import { Page } from '../components/Nav';
+import { Page } from '../components/AppShell';
 import {
   Badge,
   Button,

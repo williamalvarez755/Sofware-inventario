@@ -1,33 +1,32 @@
 @import 'tailwindcss';
 
 /* ============================================================================
-   Sistema visual — "Vidrio sobre caliza"
+   SISTEMA VISUAL — "Cristal" · Minimarket GT
    ----------------------------------------------------------------------------
-   El material es vidrio líquido: superficies translúcidas que refractan y
-   atrapan la luz en sus cantos. Para que eso LEA hacen falta tres cosas que
-   el diseño anterior no tenía:
+   Reconstruido desde cero sobre el logotipo del producto, que fija la paleta:
+   azul marino #002055 y azul #0061F3. De ahí salen DOS familias:
 
-     1. Un suelo que no sea negro. El vidrio sobre negro es una caja gris: no
-        hay nada detrás que difuminar. La base subió a ~12 % de luminosidad y
-        las superficies a 18–27 %.
-     2. Luz ambiental detrás. Tres halos enormes y muy diluidos que derivan
-        despacio: son lo que el vidrio refracta.
-     3. Poco croma. Los acentos bajaron de 91 % a ~45 % de saturación. Sobre
-        un entorno casi neutro siguen marcando lo accionable, sin el aire de
-        letrero de neón que tenía la versión anterior.
+     · NEUTROS fríos de croma bajísimo (matiz 216°, 12–20 % de saturación).
+       Son el 95 % de la pantalla: fondo, superficies, bordes, texto. A esa
+       saturación leen como vidrio y acero, no como "una app azul".
+     · ACENTO: el azul de la marca bajado a ~68 % de croma. Ocupa el 5 % de la
+       pantalla y solo marca lo accionable. La sensación de "saturado" la da
+       el ÁREA, no el color: un acento vivo en poca superficie se ve elegante;
+       un fondo teñido en toda la pantalla, nunca.
 
-   Neutros CÁLIDOS (matiz ~34°): leen como piedra y papel, no como consola.
-   Todo se escribe contra variables; cambiar de tema no deja un borde fuera.
+   El vidrio es OBLIGATORIO: no hay interruptor para apagarlo. Lo único que lo
+   atenúa es `prefers-reduced-transparency`, que es una necesidad declarada
+   por la persona, no una preferencia de rendimiento.
+
+   Tipografía Inter / Inter Tight: la familia más neutra y legible que existe
+   para interfaz. No tiene carácter propio, y eso es exactamente lo que se le
+   pide a la letra de un sistema que alguien mira ocho horas.
    ============================================================================ */
 
 @theme {
-  /* Fraunces solo en títulos y cifras protagonistas: serif variable con eje
-     óptico, da el aire de rótulo de tienda bien pintado. Manrope para la
-     interfaz y para el dinero — sus números son anchos y se comparan de un
-     vistazo, que es lo que un cajero hace ocho horas al día. */
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-sans: 'Manrope', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Inter Tight', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Inter', 'Segoe UI', system-ui, sans-serif;
 
   --color-bg: hsl(var(--bg));
   --color-bg-deep: hsl(var(--bg-deep));
@@ -43,70 +42,133 @@
   --color-accent-ink: hsl(var(--accent-ink));
 }
 
-/* --- Valores iniciales: modo oscuro "Basalto" ----------------------------
-   Están aquí para que no haya destello antes de que React aplique el tema. */
+/* ─────────────────────── Modo oscuro (valores iniciales) ───────────────────
+   Van en :root para que no haya destello antes de que React aplique el tema. */
 :root {
-  --bg: 34 8% 14%;
-  --bg-deep: 32 10% 9%;
-  --surface-1: 34 8% 22%;
-  --surface-2: 34 8% 26%;
-  --surface-3: 34 7% 31%;
-  --border: 34 7% 36%;
-  --text-1: 38 22% 96%;
-  --text-2: 34 9% 75%;
-  --text-3: 34 8% 56%;
+  /* El lienzo es TINTA AZUL profunda, no gris. Un modo oscuro se ve genérico
+     cuando el fondo, la barra y los paneles caen en el mismo valor: sin
+     escalones no hay nada que mirar. Aquí hay cuatro peldaños reales —
+     8 % el suelo, 15 % las superficies, y el vidrio por encima— y el matiz
+     se mantiene en 222–226° para que los oscuros tengan color propio en vez
+     de ser el #1e1e1e de cualquier editor. */
+  --bg: 226 36% 7%;
+  /* Gradación vertical del lienzo, contenida: con cinco puntos de diferencia
+     la mitad superior se leía como una banda clara sobre el resto. */
+  --bg-alto: 225 38% 10.5%;
+  --bg-deep: 228 42% 4%;
+  --surface-1: 223 24% 15%;
+  --surface-2: 222 22% 19%;
+  --surface-3: 221 20% 24%;
+  --border: 221 18% 30%;
+  --text-1: 213 32% 97%;
+  --text-2: 217 18% 77%;
+  --text-3: 218 14% 56%;
 
-  --accent: 165 42% 52%;
-  --accent-strong: 165 46% 62%;
-  --accent-ink: 168 55% 8%;
+  --accent: 216 68% 60%;
+  --accent-strong: 214 78% 72%;
+  --accent-ink: 217 60% 9%;
 
-  /* Estados. Un par por modo: "peligro" tiene que leerse igual de claro sobre
-     basalto que sobre papel, y un rojo que funciona en uno ciega en el otro. */
-  --ok: 158 44% 56%;
-  --warn: 38 68% 60%;
-  --danger: 6 62% 63%;
+  --ok: 158 38% 56%;
+  --warn: 38 62% 62%;
+  --danger: 5 58% 64%;
 
-  /* Material: cuánto brilla el canto, cuánto difumina y cuánto pesa la sombra. */
-  --glass-tint: 0 0% 100%;
-  --glass-spec: 0.16;
-  --glass-rim: 0.34;
+  /* ── Color propio de cada módulo ──────────────────────────────────────
+     Ocho iconos del mismo azul se leen como una lista, no como ocho cosas
+     distintas: la vista no tiene de dónde agarrarse y hay que leer las
+     etiquetas una por una. Un tono por módulo convierte el icono en una
+     referencia —"lo morado es productos"— y después de un día de uso la mano
+     va sola. Todos de croma medio y repartidos por la rueda, de modo que
+     siguen pareciendo una familia y no una caja de crayones.
+
+     El tono vive solo en el GLIFO y en su pastilla. El texto, los bordes y
+     los fondos se quedan neutros: si el color se derramara a la superficie,
+     la barra lateral se volvería un semáforo. */
+  --tono-inicio: 216 70% 65%;
+  --tono-vender: 162 48% 56%;
+  --tono-caja: 38 70% 62%;
+  --tono-productos: 266 55% 72%;
+  --tono-compras: 190 52% 57%;
+  --tono-proveedores: 20 62% 65%;
+  --tono-gastos: 340 55% 69%;
+  --tono-reportes: 232 62% 73%;
+
+  /* Material del vidrio. Sobre un suelo profundo el canto puede brillar más
+     sin volverse lechoso, y es el canto —no el relleno— lo que hace que una
+     superficie se lea como vidrio y no como un rectángulo gris. */
+  /* La tinta del vidrio NO es blanco puro: es un azul clarísimo. El blanco
+     sobre un fondo oscuro se ve como pintura; un reflejo frío se ve como luz.
+     Es la diferencia entre un canto que brilla y una mancha lechosa. */
+  --glass-tint: 208 55% 90%;
+  --glass-a1: 0.07; /* relleno arriba */
+  --glass-a2: 0.02; /* relleno abajo  */
+  --glass-spec: 0.22; /* reflejo del canto superior */
+  --glass-rim: 0.46; /* aro de 1 px */
   --glass-blur: 26px;
-  --glass-sat: 165%;
-  --shadow-color: 32 16% 3%;
-  --shadow-strength: 0.55;
+  --glass-sat: 185%;
+  /* El vidrio esmerilado DISPERSA la luz: lo que hay detrás se ve más claro
+     a través de él, no cubierto de blanco. Subir el brillo del fondo es lo
+     que levanta el panel conservando su color —el azul del lienzo sigue
+     siendo azul, solo que más luminoso—. Un velo blanco haría lo contrario:
+     sube el valor y mata el croma, que es justo lo que se ve opaco. */
+  --glass-bright: 1.55;
+  --shadow-color: 230 70% 2%;
+  --shadow-strength: 0.8;
 
   color-scheme: dark;
   accent-color: hsl(var(--accent));
 }
 
+/* ─────────────────────────────── Modo claro ─────────────────────────────── */
 :root[data-mode='claro'] {
-  --bg: 40 32% 97%;
-  --bg-deep: 36 26% 91%;
-  --surface-1: 40 40% 100%;
-  --surface-2: 40 28% 98%;
-  --surface-3: 38 22% 95%;
-  --border: 36 16% 84%;
-  --text-1: 30 16% 13%;
-  --text-2: 32 9% 36%;
-  --text-3: 32 8% 51%;
+  --bg: 213 32% 95%;
+  --bg-alto: 210 48% 98%;
+  --bg-deep: 214 28% 88%;
+  --surface-1: 0 0% 100%;
+  --surface-2: 213 36% 98%;
+  --surface-3: 213 30% 94%;
+  --border: 215 20% 84%;
+  --text-1: 217 33% 14%;
+  --text-2: 216 14% 38%;
+  --text-3: 215 12% 53%;
 
-  --ok: 158 62% 27%;
-  --warn: 30 78% 34%;
-  --danger: 4 64% 44%;
+  --accent: 217 68% 47%;
+  --accent-strong: 218 72% 38%;
+  --accent-ink: 210 45% 99%;
 
-  /* En claro el canto no brilla: se oscurece. Y el difuminado es menor,
-     porque sobre papel el exceso de blur ensucia en vez de dar aire. */
-  --glass-tint: 34 20% 20%;
-  --glass-spec: 0.07;
-  --glass-rim: 0.1;
-  --glass-blur: 18px;
-  --glass-sat: 150%;
-  --shadow-color: 34 28% 46%;
-  --shadow-strength: 0.16;
+  --ok: 160 46% 30%;
+  --warn: 30 70% 38%;
+  --danger: 2 60% 45%;
+
+  /* Sobre papel los mismos tonos cegarían: cada uno baja de luminosidad lo
+     necesario para mantener contraste contra el blanco. */
+  --tono-inicio: 217 68% 46%;
+  --tono-vender: 166 58% 30%;
+  --tono-caja: 32 72% 40%;
+  --tono-productos: 266 46% 51%;
+  --tono-compras: 192 62% 33%;
+  --tono-proveedores: 18 62% 45%;
+  --tono-gastos: 340 54% 46%;
+  --tono-reportes: 233 52% 51%;
+
+  /* Sobre papel el vidrio se hace con BLANCO, no con un velo claro: la
+     superficie tiene que ser más luminosa que el fondo para leerse como una
+     lámina encima, y el canto lo dibuja la sombra, no el brillo. */
+  --glass-tint: 0 0% 100%;
+  --glass-a1: 0.8;
+  --glass-a2: 0.6;
+  --glass-spec: 0.9;
+  --glass-rim: 0.75;
+  --glass-blur: 20px;
+  --glass-sat: 170%;
+  /* Sobre papel no hay nada que levantar: el fondo ya es la luz. */
+  --glass-bright: 1;
+  --shadow-color: 217 35% 40%;
+  --shadow-strength: 0.17;
 
   color-scheme: light;
 }
 
+/* ───────────────────────── Lienzo y luz ambiental ───────────────────────── */
 html,
 body,
 #root {
@@ -114,107 +176,146 @@ body,
 }
 
 body {
-  background-color: hsl(var(--bg));
+  margin: 0;
+  /* Gradación vertical: el lienzo se aclara hacia arriba, como una pared con
+     la luz colgada del techo. Un relleno plano es lo que hace que un modo
+     oscuro se vea de plantilla. */
+  background:
+    linear-gradient(180deg, hsl(var(--bg-alto)) 0%, hsl(var(--bg)) 46%),
+    hsl(var(--bg));
+  background-attachment: fixed;
   color: hsl(var(--text-1));
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* `clip` y no `hidden`: `overflow-x: hidden` convierte al body en contenedor
+     de desplazamiento y eso rompe el `position: sticky` de la barra lateral,
+     que se quedaba arriba al bajar por la página. */
+  overflow-x: clip;
 }
 
-/* ============================================================================
-   Atmósfera
-   La luz que el vidrio refracta. Sin esto, las superficies translúcidas no
-   tienen nada que mostrar y el efecto se pierde por completo.
-   ============================================================================ */
+/* Lo que el vidrio refracta. Sin algo detrás, una superficie translúcida es
+   un rectángulo gris. Tres focos muy diluidos, uno frío y uno malva, para que
+   el lienzo no quede monocromo. */
 body::before {
   content: '';
   position: fixed;
-  inset: -20%;
+  inset: -30vmax;
+  z-index: -2;
   pointer-events: none;
-  z-index: 0;
+  /* Cuatro campos enormes y muy diluidos que recorren la pantalla: azul de la
+     marca arriba a la izquierda, cian arriba a la derecha, violeta abajo y un
+     susurro de rosa en la esquina opuesta. Cada uno es demasiado grande para
+     verse como una mancha; lo que se percibe es que el lienzo tiene color
+     propio y cambia según dónde se mire. Eso es lo que el vidrio refracta. */
   background:
-    radial-gradient(44rem 34rem at 16% 2%, hsl(var(--accent) / 0.2), transparent 64%),
-    /* Contraluz cálido fijo: sin él todo queda teñido del acento y el
-       conjunto se ve monocromo. Esta es la segunda fuente de luz. */
-      radial-gradient(40rem 30rem at 92% 6%, hsl(26 60% 50% / 0.1), transparent 60%),
-    radial-gradient(50rem 36rem at 58% 106%, hsl(var(--accent) / 0.08), transparent 62%),
-    radial-gradient(70rem 50rem at 50% 50%, hsl(var(--bg) / 0), hsl(var(--bg-deep) / 0.55));
-  animation: deriva 38s ease-in-out infinite alternate;
-  will-change: transform;
+    radial-gradient(60vmax 48vmax at 4% -10%, hsl(var(--accent) / 0.42), transparent 58%),
+    radial-gradient(46vmax 42vmax at 100% -4%, hsl(188 76% 48% / 0.24), transparent 60%),
+    radial-gradient(58vmax 52vmax at 84% 106%, hsl(264 66% 58% / 0.32), transparent 62%),
+    radial-gradient(44vmax 38vmax at 12% 100%, hsl(328 60% 56% / 0.15), transparent 64%),
+    radial-gradient(40vmax 34vmax at 48% 46%, hsl(210 60% 46% / 0.12), transparent 66%);
+  animation: deriva 44s ease-in-out infinite alternate;
+}
+
+:root[data-mode='claro'] body::before {
+  background:
+    radial-gradient(42vmax 42vmax at 16% 6%, hsl(var(--accent) / 0.16), transparent 62%),
+    radial-gradient(38vmax 38vmax at 88% 12%, hsl(192 70% 55% / 0.14), transparent 64%),
+    radial-gradient(46vmax 46vmax at 72% 96%, hsl(255 60% 62% / 0.1), transparent 66%);
 }
 
 @keyframes deriva {
   from {
     transform: translate3d(0, 0, 0) scale(1);
   }
+
   to {
-    transform: translate3d(-2.5%, 1.5%, 0) scale(1.06);
+    transform: translate3d(2.5%, -2%, 0) scale(1.07);
   }
 }
 
-/* Grano: rompe el degradado y evita el banding, que en las pantallas baratas
-   de mostrador se nota muchísimo en superficies grandes. */
+/* Grano: mata el banding de los degradados en las pantallas baratas que son
+   la norma en tienda. En `soft-light` queda como textura, no como suciedad. */
 body::after {
   content: '';
   position: fixed;
   inset: 0;
+  z-index: -1;
   pointer-events: none;
-  z-index: 0;
-  opacity: 0.16;
+  opacity: 0.14;
   mix-blend-mode: soft-light;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.34'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
 :root[data-mode='claro'] body::after {
-  opacity: 0.4;
+  opacity: 0.3;
   mix-blend-mode: multiply;
 }
 
-#root {
-  position: relative;
-  z-index: 1;
-}
+/* ═════════════════════════════════ VIDRIO ═════════════════════════════════
+   Tres capas de luz, que es lo que separa "caja translúcida" de vidrio:
+     1. relleno en degradado vertical — el cuerpo del material
+     2. reflejo especular en el canto superior — de dónde viene la luz
+     3. aro de 1 px pintado con degradado y recortado con máscara — el filo
+   Y cuatro niveles, según lo que haya debajo y lo que haya que leer encima.
 
-/* ============================================================================
-   Vidrio líquido
-   Tres capas de luz hacen el material:
-     · el relleno, un degradado vertical más claro arriba, como una lente;
-     · el reflejo especular del canto superior;
-     · y el aro del borde, brillante arriba y apagado abajo.
-   Ese aro es lo que separa "panel translúcido" de "vidrio": es el biselado.
-   ============================================================================ */
+   Van en `@layer components` a propósito: el material necesita
+   `position: relative` para colgar su aro de 1 px, y sin capa esa regla le
+   ganaba a las utilidades de Tailwind — la barra lateral pedía `sticky` y se
+   quedaba en `relative`, así que al bajar por la página desaparecía. Dentro
+   de la capa, cualquier utilidad manda sobre el material. */
+
+@layer components {
 .glass,
 .glass-chrome,
-.glass-raised {
+.glass-raised,
+.glass-soft {
   position: relative;
-  background: linear-gradient(
-    180deg,
-    hsl(var(--surface-1) / 0.76) 0%,
-    hsl(var(--surface-1) / 0.58) 100%
+  isolation: isolate;
+  background-image: linear-gradient(
+    168deg,
+    hsl(var(--glass-tint) / var(--glass-a1)) 0%,
+    hsl(var(--glass-tint) / var(--glass-a2)) 100%
   );
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat))
+    brightness(var(--glass-bright));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat))
+    brightness(var(--glass-bright));
+  /* Tres sombras: el reflejo del canto, un contacto corto que pega la pieza
+     al fondo, y una caída larga y teñida de azul —no negra— que es lo que
+     hace que la superficie flote en vez de estar pintada encima. */
   box-shadow:
     inset 0 1px 0 hsl(var(--glass-tint) / var(--glass-spec)),
-    0 1px 2px hsl(var(--shadow-color) / calc(var(--shadow-strength) * 0.7)),
-    0 16px 40px -22px hsl(var(--shadow-color) / var(--shadow-strength));
+    0 1px 2px hsl(var(--shadow-color) / calc(var(--shadow-strength) * 0.5)),
+    0 22px 48px -26px hsl(var(--shadow-color) / var(--shadow-strength));
 }
 
-/* El aro: un borde de 1 px pintado con degradado y recortado con máscara. */
+/* Aquí vivía un "destello de esquina" —un foco radial en el vértice superior
+   izquierdo— que se retiró: sobre fondo oscuro no se leía como luz sino como
+   un velo blanco sucio en la esquina de cada panel. Medido, el pico llegaba a
+   rgb(89, 92, 107) sobre un lienzo de rgb(11, 13, 25); en los paneles chicos
+   cubría media superficie. La dirección de la luz ya la dan el reflejo del
+   canto superior y el degradado del aro, que son líneas y no manchas. */
+
+/* El aro. `mask-composite: exclude` deja solo el marco de 1 px, así que el
+   degradado se ve como un canto iluminado arriba y apagado abajo. */
 .glass::after,
 .glass-chrome::after,
-.glass-raised::after {
+.glass-raised::after,
+.glass-soft::after {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: -1;
   border-radius: inherit;
   padding: 1px;
-  pointer-events: none;
   background: linear-gradient(
-    180deg,
+    168deg,
     hsl(var(--glass-tint) / var(--glass-rim)) 0%,
-    hsl(var(--glass-tint) / calc(var(--glass-rim) * 0.28)) 45%,
-    hsl(var(--glass-tint) / calc(var(--glass-rim) * 0.14)) 100%
+    hsl(var(--glass-tint) / calc(var(--glass-rim) * 0.38)) 38%,
+    hsl(var(--glass-tint) / calc(var(--glass-rim) * 0.15)) 100%
   );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
@@ -224,62 +325,90 @@ body::after {
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
   mask-composite: exclude;
+  pointer-events: none;
 }
 
-/* Cromo: la barra fija. Más difuminado y más cuerpo, porque debajo pasa
-   contenido en movimiento y tiene que seguir siendo legible. */
+/* En claro el filo blanco no se ve contra papel: el borde lo dibuja una línea
+   oscura finísima, que es como se ve el canto de un vidrio sobre algo claro. */
+:root[data-mode='claro'] .glass::after,
+:root[data-mode='claro'] .glass-chrome::after,
+:root[data-mode='claro'] .glass-raised::after,
+:root[data-mode='claro'] .glass-soft::after {
+  background: linear-gradient(
+    168deg,
+    hsl(0 0% 100% / 0.95) 0%,
+    hsl(215 25% 60% / 0.3) 55%,
+    hsl(215 25% 50% / 0.34) 100%
+  );
+}
+
+/* Cromo de la aplicación (barra lateral y superior): más difuminado, porque
+   debajo pasa contenido en movimiento y tiene que seguir legible. */
 .glass-chrome {
-  background: linear-gradient(
-    180deg,
-    hsl(var(--surface-1) / 0.9) 0%,
-    hsl(var(--surface-1) / 0.76) 100%
-  );
-  backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.4)) saturate(var(--glass-sat));
+  --glass-blur: 34px;
+  --glass-a1: 0.1;
+  --glass-a2: 0.05;
+  --glass-sat: 150%;
 }
 
-/* Elevado: modales y menús. Casi opaco — encima hay que leer y decidir. */
+/* En oscuro el cromo va MÁS HONDO que el lienzo. Es lo que arma la
+   arquitectura de la pantalla: la columna y la barra son el marco —se hunden
+   y se quedan quietas— y el área de trabajo queda iluminada en medio. Cuando
+   los tres están en el mismo valor, no hay composición, hay un rectángulo. */
+:root:not([data-mode='claro']) .glass-chrome {
+  background-color: hsl(226 36% 5% / 0.72);
+  --glass-a1: 0.055;
+  --glass-a2: 0.022;
+  --glass-rim: 0.3;
+  /* El marco no se ilumina: su trabajo es hundirse. */
+  --glass-bright: 1;
+}
+
+:root[data-mode='claro'] .glass-chrome {
+  --glass-a1: 0.78;
+  --glass-a2: 0.62;
+}
+
+/* Capa elevada (modales, menús): casi opaca. Encima hay que leer y decidir, y
+   un fondo que se mueve detrás del texto es un error, no un efecto. */
 .glass-raised {
-  background: linear-gradient(
-    180deg,
-    hsl(var(--surface-2) / 0.96) 0%,
-    hsl(var(--surface-1) / 0.92) 100%
-  );
-  backdrop-filter: blur(calc(var(--glass-blur) * 1.6)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.6)) saturate(var(--glass-sat));
+  --glass-a1: 0.17;
+  --glass-a2: 0.11;
+  --glass-rim: 0.44;
+  --glass-blur: 40px;
+  --glass-sat: 180%;
+  background-color: hsl(var(--surface-1) / 0.86);
   box-shadow:
-    inset 0 1px 0 hsl(var(--glass-tint) / calc(var(--glass-spec) * 1.4)),
-    0 24px 70px -20px hsl(var(--shadow-color) / calc(var(--shadow-strength) * 1.6));
+    inset 0 1px 0 hsl(var(--glass-tint) / calc(var(--glass-spec) * 1.3)),
+    0 40px 90px -30px hsl(var(--shadow-color) / 0.75);
 }
 
-/* Variante tenue para zonas secundarias dentro de un panel. */
+:root[data-mode='claro'] .glass-raised {
+  --glass-a1: 0.9;
+  --glass-a2: 0.8;
+  background-color: hsl(0 0% 100% / 0.9);
+  box-shadow: 0 40px 90px -34px hsl(var(--shadow-color) / 0.5);
+}
+
+/* Pieza pequeña dentro de otra superficie: pastillas, casillas de icono. */
 .glass-soft {
-  background: hsl(var(--surface-1) / 0.4);
-  border: 1px solid hsl(var(--glass-tint) / calc(var(--glass-rim) * 0.5));
-  backdrop-filter: blur(12px) saturate(130%);
-  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  --glass-a1: 0.07;
+  --glass-a2: 0.03;
+  --glass-rim: 0.18;
+  --glass-blur: 10px;
+  /* Va dentro de un panel que ya está iluminado: volver a subirle el brillo
+     lo dispararía. Solo un empujón. */
+  --glass-bright: 1.2;
+  box-shadow: inset 0 1px 0 hsl(var(--glass-tint) / calc(var(--glass-spec) * 0.7));
 }
 
-/* Equipos de mostrador sin GPU decente, y quien pide menos transparencia. */
-:root[data-glass='off'] .glass,
-:root[data-glass='off'] .glass-chrome,
-:root[data-glass='off'] .glass-raised,
-:root[data-glass='off'] .glass-soft {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-:root[data-glass='off'] .glass,
-:root[data-glass='off'] .glass-soft {
-  background: hsl(var(--surface-1));
-}
-:root[data-glass='off'] .glass-chrome,
-:root[data-glass='off'] .glass-raised {
-  background: hsl(var(--surface-2));
-}
-:root[data-glass='off'] body::before {
-  animation: none;
+:root[data-mode='claro'] .glass-soft {
+  --glass-a1: 0.72;
+  --glass-a2: 0.5;
 }
 
+/* Única excepción al vidrio obligatorio: una necesidad declarada de la
+   persona, no una preferencia de rendimiento. */
 @media (prefers-reduced-transparency: reduce) {
   .glass,
   .glass-chrome,
@@ -287,94 +416,117 @@ body::after {
   .glass-soft {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: hsl(var(--surface-1));
+    background-color: hsl(var(--surface-1));
+    background-image: none;
+  }
+
+  /* También se va el aro: es luz, y aquí no hay material que la refleje.
+     Queda el borde plano. */
+  .glass::after,
+  .glass-chrome::after,
+  .glass-raised::after,
+  .glass-soft::after {
+    background: hsl(var(--border));
+  }
+
+  body::before {
+    display: none;
   }
 }
 
-/* ============================================================================
-   Tipografía
-   ============================================================================ */
+/* ════════════════════════════════ Tipografía ════════════════════════════════ */
+
 .font-display {
   font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 24, 'WONK' 0;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.021em;
 }
 
-/* El dinero SIEMPRE en cifras tabulares: las columnas se alinean solas y el
-   ojo compara montos sin releer. Con la familia de la interfaz, no con una
-   monoespaciada: un precio debe leerse como parte de la aplicación. */
+/* Dinero y cantidades: cifras tabulares para que las columnas se comparen de
+   un vistazo, que es lo que un cajero hace todo el día. */
 .money,
 .cifras {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1, 'ss01' 1;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.012em;
 }
 
-/* Cifra protagonista: lo primero que mira un dueño al abrir la aplicación. */
-.cifra-hero {
+/* Cifra protagonista. */
+.cifra {
   font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 48, 'WONK' 0;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-  line-height: 0.92;
+  letter-spacing: -0.035em;
+  line-height: 0.96;
 }
 
+/* Rótulo de sección: pequeño, espaciado, sin gritar. */
 .rotulo {
-  font-size: 0.6875rem;
-  font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 650;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: hsl(var(--text-3));
 }
+}
 
-/* ============================================================================
-   Foco: aro de acento. En el mostrador se opera con teclado y lector.
-   ============================================================================ */
+/* ═══════════════════════════════ Utilidades ═══════════════════════════════ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--text-1) / 0.18) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--text-1) / 0.16);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--text-1) / 0.3);
+  background-clip: content-box;
+}
+
+::selection {
+  background: hsl(var(--accent) / 0.3);
+}
+
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid hsl(var(--accent));
   outline-offset: 2px;
-  border-radius: 0.6rem;
 }
 
-/* --- Barras de desplazamiento -------------------------------------------- */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border)) transparent;
-}
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 99px;
-  border: 3px solid transparent;
-  background-clip: content-box;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--text-3));
-  background-clip: content-box;
-}
-
-/* ============================================================================
-   Movimiento: una sola coreografía de entrada, escalonable con --paso.
-   ============================================================================ */
+/* Entrada escalonada: `--paso` retrasa cada elemento y la pantalla se arma en
+   vez de aparecer de golpe. */
+/* La opacidad termina en el primer tercio y el resto del recorrido es solo
+   desplazamiento. Si la transparencia dura todo el trayecto, la pantalla pasa
+   casi medio segundo a media tinta — y sobre un lienzo oscuro, el contenido a
+   media tinta no se ve "entrando": se ve cubierto por un velo blanco. */
 @keyframes surgir {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.995);
+    transform: translateY(9px);
   }
+
+  38% {
+    opacity: 1;
+  }
+
   to {
     opacity: 1;
     transform: none;
   }
 }
 
+@layer components {
 .surgir {
-  animation: surgir 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--paso, 0) * 60ms);
+  animation: surgir 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--paso, 0) * 38ms);
+}
 }
 
 @keyframes latido {
@@ -382,12 +534,14 @@ body::after {
   100% {
     opacity: 1;
   }
+
   50% {
-    opacity: 0.4;
+    opacity: 0.45;
   }
 }
+
 .latido {
-  animation: latido 2s ease-in-out infinite;
+  animation: latido 1.9s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -396,50 +550,49 @@ body::after {
   body::before {
     animation: none;
   }
+
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-/* Autocompletado del navegador: sin el amarillo que rompe el tema. */
-input:-webkit-autofill,
-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: hsl(var(--text-1));
-  -webkit-box-shadow: 0 0 0 1000px hsl(var(--surface-2)) inset;
-  caret-color: hsl(var(--accent));
+/* ═════════════════════════ Logotipo según el modo ═════════════════════════
+   El logo es de dos tintas y la oscura desaparece sobre fondo oscuro. En vez
+   de redibujarlo se sirven dos versiones y el tema elige, así el trazo que se
+   ve es siempre el que entregó el dueño. */
+:root[data-mode='claro'] .solo-oscuro,
+:root:not([data-mode='claro']) .solo-claro {
+  display: none;
 }
 
-/* ============================================================================
-   Impresión térmica 58/80 mm (D-009). Al imprimir solo existe el comprobante,
-   en negro sobre blanco: la impresora no entiende de vidrio ni de temas.
-   ============================================================================ */
+/* ═══════════════════════════════ Impresión ═══════════════════════════════ */
 @media print {
   body::before,
   body::after {
     display: none;
   }
+
   body * {
     visibility: hidden;
   }
+
   .receipt-print,
   .receipt-print * {
     visibility: visible;
-    color: #000;
-    background: transparent;
   }
+
   .receipt-print {
     position: absolute;
     left: 0;
     top: 0;
-    width: 72mm;
-    margin: 0;
-    padding: 2mm;
+    width: 100%;
+    background: #fff;
+    color: #000;
   }
 }
 
 @page {
-  margin: 0;
+  margin: 4mm;
 }

@@ -15,7 +15,6 @@ interface ThemeState extends ThemeChoice {
   resolved: ResolvedMode;
   setMode(mode: Mode): void;
   setAccent(id: string): void;
-  setGlass(on: boolean): void;
 }
 
 const ThemeCtx = createContext<ThemeState | null>(null);
@@ -33,7 +32,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // a oscuro, la aplicación acompaña sin que haya que recargar.
   useEffect(() => {
     if (choice.mode !== 'sistema' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const alCambiar = () => setResolved(applyTheme(choice));
     mq.addEventListener('change', alCambiar);
     return () => mq.removeEventListener('change', alCambiar);
@@ -51,7 +50,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolved,
       setMode: (mode) => setChoice((c) => ({ ...c, mode })),
       setAccent: (accent) => setChoice((c) => ({ ...c, accent })),
-      setGlass: (glass) => setChoice((c) => ({ ...c, glass })),
     }),
     [choice, resolved],
   );

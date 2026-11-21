@@ -1,22 +1,24 @@
 /**
- * Sistema de temas.
+ * Tema de la aplicación.
  *
- * Dos ejes:
- *  - MODO: claro, oscuro o el del sistema. El anterior ofrecía cuatro fondos
- *    oscuros que se diferenciaban en la temperatura y poco más; era elegir
- *    entre cuatro negros. Un modo claro de verdad sí cambia la vida de quien
- *    atiende junto a una ventana al mediodía, que es media Guatemala.
- *  - ACENTO: el color que marca lo accionable. Todos de croma bajo
- *    (~45 % de saturación): sobre un entorno casi neutro no hace falta más, y
- *    el exceso de saturación es lo que hacía que la versión anterior se
- *    sintiera dura a las ocho horas de turno.
+ * Dos ejes, y solo dos:
+ *   · MODO — claro, oscuro o el del sistema. Por omisión sigue al equipo:
+ *     un mostrador junto a una ventana al mediodía pide claro, y la misma
+ *     tienda a las ocho de la noche pide oscuro. Que lo decida la máquina es
+ *     una decisión menos para el tendero.
+ *   · ACENTO — el color de lo accionable. Por omisión el azul del logotipo.
  *
- * Las superficies viven en el CSS (`:root` y `:root[data-mode='claro']`), no
- * aquí: el modo es una decisión de material, no de datos. Lo único que esta
- * capa inyecta es el acento, que sí es elección del usuario.
+ * Ya NO existe el interruptor de vidrio: el material es obligatorio y forma
+ * parte de la identidad del producto. Lo único que lo atenúa es
+ * `prefers-reduced-transparency`, que se resuelve en CSS.
+ *
+ * Las superficies viven en el CSS (`:root` y `:root[data-mode='claro']`): el
+ * modo es una decisión de material, no de datos. Lo único que esta capa
+ * inyecta es el acento, que sí es elección de quien usa el sistema.
  *
  * Cada acento trae su pareja por modo, porque un color que contrasta sobre
- * basalto se pierde sobre papel. `--accent-ink` es el texto SOBRE el acento.
+ * vidrio oscuro se pierde sobre papel. `--accent-ink` es el texto SOBRE el
+ * acento; `--accent-strong` es la variante de más contraste para texto.
  */
 
 export type Mode = 'claro' | 'oscuro' | 'sistema';
@@ -25,60 +27,89 @@ export type ResolvedMode = 'claro' | 'oscuro';
 export interface Accent {
   id: string;
   name: string;
-  /** Muestra del selector, tomada del valor en modo oscuro. */
+  /** Muestra del selector. */
   swatch: string;
   oscuro: Record<string, string>;
   claro: Record<string, string>;
 }
 
+/**
+ * Cuatro acentos, todos de croma contenido y emparentados con el azul del
+ * logotipo. No hay un rojo ni un verde manzana a propósito: esos colores ya
+ * significan algo en este producto (peligro, correcto) y usarlos como acento
+ * rompería la lectura de los estados.
+ */
 export const ACCENTS: Accent[] = [
   {
-    id: 'jade',
-    name: 'Jade',
-    swatch: '#4fbf9b',
-    oscuro: { '--accent': '165 42% 52%', '--accent-strong': '165 48% 64%', '--accent-ink': '168 55% 8%' },
-    claro: { '--accent': '168 52% 30%', '--accent-strong': '168 58% 23%', '--accent-ink': '160 40% 98%' },
+    id: 'marino',
+    name: 'Azul Minimarket',
+    swatch: '#3d7fe0',
+    oscuro: {
+      '--accent': '216 68% 60%',
+      '--accent-strong': '214 78% 72%',
+      '--accent-ink': '217 60% 9%',
+    },
+    claro: {
+      '--accent': '217 68% 47%',
+      '--accent-strong': '218 72% 38%',
+      '--accent-ink': '210 45% 99%',
+    },
   },
   {
-    id: 'ambar',
-    name: 'Ámbar',
-    swatch: '#d79a4e',
-    oscuro: { '--accent': '34 56% 58%', '--accent-strong': '34 64% 68%', '--accent-ink': '32 60% 8%' },
-    claro: { '--accent': '28 66% 38%', '--accent-strong': '28 72% 30%', '--accent-ink': '36 50% 98%' },
-  },
-  {
-    id: 'cobre',
-    name: 'Cobre',
-    swatch: '#cf7a5d',
-    oscuro: { '--accent': '14 50% 60%', '--accent-strong': '14 58% 70%', '--accent-ink': '12 50% 8%' },
-    claro: { '--accent': '12 54% 42%', '--accent-strong': '12 60% 34%', '--accent-ink': '20 40% 98%' },
+    id: 'turquesa',
+    name: 'Turquesa',
+    swatch: '#3fa8a8',
+    oscuro: {
+      '--accent': '184 44% 52%',
+      '--accent-strong': '184 52% 64%',
+      '--accent-ink': '188 55% 8%',
+    },
+    claro: {
+      '--accent': '188 56% 33%',
+      '--accent-strong': '190 62% 26%',
+      '--accent-ink': '185 40% 99%',
+    },
   },
   {
     id: 'indigo',
     name: 'Índigo',
-    swatch: '#8a9ce0',
-    oscuro: { '--accent': '228 44% 68%', '--accent-strong': '228 52% 77%', '--accent-ink': '230 45% 9%' },
-    claro: { '--accent': '230 44% 47%', '--accent-strong': '230 50% 38%', '--accent-ink': '225 40% 98%' },
+    swatch: '#7b7ee0',
+    oscuro: {
+      '--accent': '239 52% 68%',
+      '--accent-strong': '239 62% 78%',
+      '--accent-ink': '240 50% 9%',
+    },
+    claro: {
+      '--accent': '240 48% 53%',
+      '--accent-strong': '241 54% 44%',
+      '--accent-ink': '235 40% 99%',
+    },
   },
   {
-    id: 'pizarra',
-    name: 'Pizarra',
-    swatch: '#7aa6ad',
-    oscuro: { '--accent': '190 24% 60%', '--accent-strong': '190 30% 71%', '--accent-ink': '195 35% 8%' },
-    claro: { '--accent': '196 32% 34%', '--accent-strong': '196 38% 26%', '--accent-ink': '190 30% 98%' },
+    id: 'grafito',
+    name: 'Grafito',
+    swatch: '#8a94a6',
+    oscuro: {
+      '--accent': '215 16% 62%',
+      '--accent-strong': '214 22% 76%',
+      '--accent-ink': '217 30% 10%',
+    },
+    claro: {
+      '--accent': '216 18% 38%',
+      '--accent-strong': '217 24% 28%',
+      '--accent-ink': '210 25% 99%',
+    },
   },
 ];
 
-export const DEFAULT_MODE: Mode = 'oscuro';
-export const DEFAULT_ACCENT = 'jade';
+export const DEFAULT_MODE: Mode = 'sistema';
+export const DEFAULT_ACCENT = 'marino';
 
 const STORAGE_KEY = 'mm.tema';
 
 export interface ThemeChoice {
   mode: Mode;
   accent: string;
-  /** Efecto vidrio: se puede apagar en equipos lentos de tienda. */
-  glass: boolean;
 }
 
 const MODES: Mode[] = ['claro', 'oscuro', 'sistema'];
@@ -91,13 +122,12 @@ export function readStoredTheme(): ThemeChoice {
       return {
         mode: MODES.includes(parsed.mode as Mode) ? (parsed.mode as Mode) : DEFAULT_MODE,
         accent: ACCENTS.some((a) => a.id === parsed.accent) ? parsed.accent! : DEFAULT_ACCENT,
-        glass: parsed.glass !== false,
       };
     }
   } catch {
     /* almacenamiento bloqueado: se usa el tema por omisión */
   }
-  return { mode: DEFAULT_MODE, accent: DEFAULT_ACCENT, glass: true };
+  return { mode: DEFAULT_MODE, accent: DEFAULT_ACCENT };
 }
 
 export function storeTheme(choice: ThemeChoice): void {
@@ -111,13 +141,13 @@ export function storeTheme(choice: ThemeChoice): void {
 /** Traduce "sistema" a lo que el equipo tenga configurado ahora mismo. */
 export function resolveMode(mode: Mode): ResolvedMode {
   if (mode !== 'sistema') return mode;
-  if (typeof window === 'undefined' || !window.matchMedia) return 'oscuro';
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'claro' : 'oscuro';
+  if (typeof window === 'undefined' || !window.matchMedia) return 'claro';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro';
 }
 
 /** Color de la barra del navegador móvil, para que acompañe al tema. */
 export function browserBarColor(mode: ResolvedMode): string {
-  return mode === 'claro' ? '#f7f3ec' : '#1c1a18';
+  return mode === 'claro' ? '#eef2f8' : '#171d28';
 }
 
 /** Escribe en :root. Es lo único que toca el DOM de forma global. */
@@ -127,7 +157,6 @@ export function applyTheme(choice: ThemeChoice): ResolvedMode {
   const root = document.documentElement;
 
   root.dataset.mode = resolved;
-  root.dataset.glass = choice.glass ? 'on' : 'off';
   for (const [key, value] of Object.entries(accent[resolved])) {
     root.style.setProperty(key, value);
   }

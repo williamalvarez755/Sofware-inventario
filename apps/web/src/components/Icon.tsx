@@ -38,7 +38,19 @@ export type IconName =
   | 'basura'
   | 'editar'
   | 'tienda'
-  | 'codigo';
+  | 'codigo'
+  | 'menu'
+  | 'colapsar'
+  | 'sol'
+  | 'luna'
+  | 'monitor'
+  | 'paleta'
+  | 'rayo'
+  | 'reloj'
+  | 'tendencia'
+  | 'etiqueta'
+  | 'cuadricula'
+  | 'flecha-izquierda';
 
 interface Glifo {
   /** Silueta de fondo, rellena y suave. */
@@ -49,87 +61,99 @@ interface Glifo {
 
 const GLIFOS: Record<IconName, Glifo> = {
   inicio: {
-    fondo: <path d="M12 3.4 20 9.6V19a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 19V9.6L12 3.4Z" />,
+    fondo: <path d="M12 2.9 20.9 9.7v9.4a2.1 2.1 0 0 1-2.1 2.1H5.2a2.1 2.1 0 0 1-2.1-2.1V9.7L12 2.9Z" />,
     trazo: (
       <>
-        <path d="M3.2 10.4 12 3.4l8.8 7" />
-        <path d="M5.4 9.2V19a1.6 1.6 0 0 0 1.6 1.6h10a1.6 1.6 0 0 0 1.6-1.6V9.2" />
-        <path d="M9.6 20.6v-5.4a1.4 1.4 0 0 1 1.4-1.4h2a1.4 1.4 0 0 1 1.4 1.4v5.4" />
+        <path d="M3.1 9.9 12 2.9l8.9 7" />
+        <path d="M5.3 9v10.1a2.1 2.1 0 0 0 2.1 2.1h9.2a2.1 2.1 0 0 0 2.1-2.1V9" />
+        <path d="M9.7 21.2v-4.8a2.3 2.3 0 0 1 4.6 0v4.8" />
       </>
     ),
   },
   'punto-venta': {
-    fondo: <rect x="3.2" y="4.2" width="17.6" height="12" rx="2.6" />,
+    fondo: (
+      <path d="M5.5 4.6a1.3 1.3 0 0 1 1.3-1.3h10.4a1.3 1.3 0 0 1 1.3 1.3v16.1l-2.2-1.5-2.1 1.5-2.2-1.5-2.1 1.5-2.2-1.5-2.2 1.5V4.6Z" />
+    ),
     trazo: (
       <>
-        <rect x="3.2" y="4.2" width="17.6" height="12" rx="2.6" />
-        <path d="M7.4 20.4h9.2" />
-        <path d="M12 16.2v4.2" />
-        <path d="M7 8.6h6.4M7 11.8h3.6" />
+        <path d="M5.5 20.7V4.6a1.3 1.3 0 0 1 1.3-1.3h10.4a1.3 1.3 0 0 1 1.3 1.3v16.1l-2.2-1.5-2.1 1.5-2.2-1.5-2.1 1.5-2.2-1.5-2.2 1.5Z" />
+        <path d="M8.7 7.9h6.6" />
+        <path d="M8.7 11.4h4.3" />
       </>
     ),
   },
   caja: {
-    fondo: <rect x="2.6" y="6.4" width="18.8" height="11.6" rx="2.8" />,
+    fondo: <rect x="2.7" y="6.9" width="18.6" height="12.4" rx="2.5" />,
     trazo: (
       <>
-        <rect x="2.6" y="6.4" width="18.8" height="11.6" rx="2.8" />
-        <circle cx="12" cy="12.2" r="2.7" />
-        <path d="M6.2 10v4.4M17.8 10v4.4" />
+        <rect x="2.7" y="6.9" width="18.6" height="12.4" rx="2.5" />
+        <path d="M2.7 11.9h18.6" />
+        <path d="M8.3 6.9v5M15.7 6.9v5" />
+        <path d="M9.9 15.8h4.2" />
       </>
     ),
   },
   productos: {
-    fondo: <path d="M12 3.2 20.4 7.6v8.8L12 20.8 3.6 16.4V7.6L12 3.2Z" />,
+    fondo: <path d="M12 2.8 20.9 7.5v9L12 21.2 3.1 16.5v-9L12 2.8Z" />,
     trazo: (
       <>
-        <path d="M3.6 7.6 12 3.2l8.4 4.4v8.8L12 20.8l-8.4-4.4V7.6Z" />
-        <path d="m3.6 7.6 8.4 4.4 8.4-4.4M12 12v8.8" />
+        <path d="M20.9 16.5v-9L12 2.8 3.1 7.5v9L12 21.2l8.9-4.7Z" />
+        <path d="M3.3 7.6 12 12.2l8.7-4.6" />
+        <path d="M12 12.2v9" />
+        <path d="m7.4 5.1 8.8 4.7" />
       </>
     ),
   },
   compras: {
-    fondo: <path d="M7 8.4h12.4l-1.7 7.4a1.6 1.6 0 0 1-1.6 1.2H9.6a1.6 1.6 0 0 1-1.5-1.2L7 8.4Z" />,
+    fondo: <path d="M3.2 12.9h17.6v5.6a2.3 2.3 0 0 1-2.3 2.3H5.5a2.3 2.3 0 0 1-2.3-2.3v-5.6Z" />,
     trazo: (
       <>
-        <path d="M2.8 4.4h2.1a1 1 0 0 1 1 .8l2.2 10.4a1.6 1.6 0 0 0 1.5 1.2h6.8a1.6 1.6 0 0 0 1.6-1.2l1.4-6.2a.9.9 0 0 0-.9-1.1H6.4" />
-        <circle cx="10" cy="20" r="1.5" />
-        <circle cx="17" cy="20" r="1.5" />
+        <path d="M3.2 12.9v5.6a2.3 2.3 0 0 0 2.3 2.3h13a2.3 2.3 0 0 0 2.3-2.3v-5.6" />
+        <path d="M3.2 12.9h4.9l1.1 2.1h5.6l1.1-2.1h4.9" />
+        <path d="M12 2.7v6.8" />
+        <path d="m8.8 6.4 3.2 3.3 3.2-3.3" />
       </>
     ),
   },
   gastos: {
-    fondo: <rect x="2.6" y="5.6" width="18.8" height="12.8" rx="2.6" />,
+    fondo: <rect x="2.6" y="5.7" width="14.6" height="9.8" rx="2.1" />,
     trazo: (
       <>
-        <rect x="2.6" y="5.6" width="18.8" height="12.8" rx="2.6" />
-        <path d="M2.6 10.2h18.8" />
-        <path d="M6.2 14.6h4" />
+        <path d="M17.2 10.4V7.8a2.1 2.1 0 0 0-2.1-2.1H4.7a2.1 2.1 0 0 0-2.1 2.1v5.6a2.1 2.1 0 0 0 2.1 2.1h5.6" />
+        <circle cx="9.9" cy="10.6" r="2.3" />
+        <path d="m14.3 21 6.1-6.1" />
+        <path d="M15.6 14.9h4.8v4.8" />
       </>
     ),
   },
   proveedores: {
-    fondo: <path d="M2.6 8.4h9.8v8H2.6z" />,
+    fondo: <path d="M2.6 8.6a1.6 1.6 0 0 1 1.6-1.6h7a1.6 1.6 0 0 1 1.6 1.6v7.6H2.6V8.6Z" />,
     trazo: (
       <>
-        <path d="M2.6 16.4v-6.6a1.4 1.4 0 0 1 1.4-1.4h8.4v8" />
-        <path d="M12.4 11.2h3.7a1.4 1.4 0 0 1 1.1.5l2.6 3a1.4 1.4 0 0 1 .3.9v.8h-7.7" />
-        <circle cx="6.6" cy="18" r="1.6" />
-        <circle cx="16.6" cy="18" r="1.6" />
+        <path d="M2.6 16.2V8.6A1.6 1.6 0 0 1 4.2 7h7a1.6 1.6 0 0 1 1.6 1.6v7.6" />
+        <path d="M12.8 10.5h3a1.7 1.7 0 0 1 1.3.6l2.2 2.7a1.7 1.7 0 0 1 .4 1.1v1.3h-6.9" />
+        <path d="M2.6 16.2h2.3M9.3 16.2h3.5" />
+        <circle cx="7.1" cy="17.9" r="1.8" />
+        <circle cx="17" cy="17.9" r="1.8" />
       </>
     ),
   },
   reportes: {
     fondo: (
       <>
-        <rect x="6.8" y="11.4" width="3" height="5.6" rx="1.2" />
-        <rect x="14.2" y="8.6" width="3" height="8.4" rx="1.2" />
+        <rect x="7" y="12.4" width="3.2" height="5" rx="1.6" />
+        <rect x="11.4" y="9.4" width="3.2" height="8" rx="1.6" />
+        <rect x="15.8" y="6.4" width="3.2" height="11" rx="1.6" />
       </>
     ),
     trazo: (
       <>
-        <path d="M4 3.6V19a1.4 1.4 0 0 0 1.4 1.4H20" />
-        <path d="M8.3 17v-5.6M12 17V9.4M15.7 17V7" />
+        <path d="M3.6 3.3v15.3a2.4 2.4 0 0 0 2.4 2.4h15" />
+        <g strokeWidth="3.1">
+          <path d="M8.6 17.3v-3.3" />
+          <path d="M13 17.3v-6.3" />
+          <path d="M17.4 17.3v-9.3" />
+        </g>
       </>
     ),
   },
@@ -320,6 +344,111 @@ const GLIFOS: Record<IconName, Glifo> = {
       </>
     ),
   },
+  menu: {
+    trazo: (
+      <>
+        <path d="M4 7h16" />
+        <path d="M4 12h16" />
+        <path d="M4 17h10" />
+      </>
+    ),
+  },
+  colapsar: {
+    fondo: <rect x="3" y="4" width="18" height="16" rx="2.6" />,
+    trazo: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2.6" />
+        <path d="M10 4v16" />
+      </>
+    ),
+  },
+  sol: {
+    fondo: <circle cx="12" cy="12" r="4.2" />,
+    trazo: (
+      <>
+        <circle cx="12" cy="12" r="4.2" />
+        <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.4 6.4 4.9 4.9M19.1 19.1l-1.5-1.5M17.6 6.4l1.5-1.5M4.9 19.1l1.5-1.5" />
+      </>
+    ),
+  },
+  luna: {
+    fondo: <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4 8.4 8.4 0 1 0 20 14.2Z" />,
+    trazo: <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4 8.4 8.4 0 1 0 20 14.2Z" />,
+  },
+  monitor: {
+    fondo: <rect x="2.6" y="4.2" width="18.8" height="12.4" rx="2.2" />,
+    trazo: (
+      <>
+        <rect x="2.6" y="4.2" width="18.8" height="12.4" rx="2.2" />
+        <path d="M8.4 20.4h7.2M12 16.6v3.8" />
+      </>
+    ),
+  },
+  paleta: {
+    fondo: <path d="M12 3.2a8.8 8.8 0 0 0 0 17.6c1.2 0 1.8-.8 1.8-1.7 0-.9-.7-1.4-.7-2.2 0-.8.6-1.4 1.5-1.4h1.6a4.6 4.6 0 0 0 4.6-4.6c0-4.3-3.9-7.7-8.8-7.7Z" />,
+    trazo: (
+      <>
+        <path d="M12 3.2a8.8 8.8 0 0 0 0 17.6c1.2 0 1.8-.8 1.8-1.7 0-.9-.7-1.4-.7-2.2 0-.8.6-1.4 1.5-1.4h1.6a4.6 4.6 0 0 0 4.6-4.6c0-4.3-3.9-7.7-8.8-7.7Z" />
+        <circle cx="7.6" cy="11.4" r="1" />
+        <circle cx="10.4" cy="7.4" r="1" />
+        <circle cx="15.2" cy="8.2" r="1" />
+      </>
+    ),
+  },
+  rayo: {
+    fondo: <path d="M13.2 2.6 5 13.4h5.2l-.6 8 8.4-11.2h-5.4l.6-7.6Z" />,
+    trazo: <path d="M13.2 2.6 5 13.4h5.2l-.6 8 8.4-11.2h-5.4l.6-7.6Z" />,
+  },
+  reloj: {
+    fondo: <circle cx="12" cy="12" r="8.8" />,
+    trazo: (
+      <>
+        <circle cx="12" cy="12" r="8.8" />
+        <path d="M12 7.2V12l3.2 1.9" />
+      </>
+    ),
+  },
+  tendencia: {
+    trazo: (
+      <>
+        <path d="M3.4 16.6 9 11l3.6 3.4 7-7.4" />
+        <path d="M15.4 7h4.2v4.2" />
+      </>
+    ),
+  },
+  etiqueta: {
+    fondo: <path d="M3.6 10.6V4.8a1.2 1.2 0 0 1 1.2-1.2h5.8a1.6 1.6 0 0 1 1.1.5l8 8a1.6 1.6 0 0 1 0 2.3l-5.9 5.9a1.6 1.6 0 0 1-2.3 0l-8-8a1.6 1.6 0 0 1-.5-1.1Z" />,
+    trazo: (
+      <>
+        <path d="M3.6 10.6V4.8a1.2 1.2 0 0 1 1.2-1.2h5.8a1.6 1.6 0 0 1 1.1.5l8 8a1.6 1.6 0 0 1 0 2.3l-5.9 5.9a1.6 1.6 0 0 1-2.3 0l-8-8a1.6 1.6 0 0 1-.5-1.1Z" />
+        <circle cx="7.9" cy="7.9" r="1.3" />
+      </>
+    ),
+  },
+  cuadricula: {
+    fondo: (
+      <>
+        <rect x="3.4" y="3.4" width="7.4" height="7.4" rx="2" />
+        <rect x="13.2" y="13.2" width="7.4" height="7.4" rx="2" />
+      </>
+    ),
+    trazo: (
+      <>
+        <rect x="3.4" y="3.4" width="7.4" height="7.4" rx="2" />
+        <rect x="13.2" y="3.4" width="7.4" height="7.4" rx="2" />
+        <rect x="3.4" y="13.2" width="7.4" height="7.4" rx="2" />
+        <rect x="13.2" y="13.2" width="7.4" height="7.4" rx="2" />
+      </>
+    ),
+  },
+  'flecha-izquierda': {
+    trazo: (
+      <>
+        <path d="M19 12H5.4" />
+        <path d="m11 5.6-5.6 6.4 5.6 6.4" />
+      </>
+    ),
+  },
 };
 
 export function Icon({
@@ -327,11 +456,15 @@ export function Icon({
   size = 20,
   className = '',
   strokeWidth = 1.7,
+  color,
 }: {
   name: IconName;
   size?: number;
   className?: string;
   strokeWidth?: number;
+  /** Color propio del glifo (los módulos traen el suyo). Todo el dibujo usa
+   *  `currentColor`, así que basta con fijarlo aquí. Sin él, hereda. */
+  color?: string;
 }) {
   const glifo = GLIFOS[name];
   return (
@@ -341,11 +474,12 @@ export function Icon({
       viewBox="0 0 24 24"
       fill="none"
       className={className}
+      style={color ? { color } : undefined}
       aria-hidden="true"
       focusable="false"
     >
       {glifo.fondo && (
-        <g fill="currentColor" opacity="0.18" stroke="none">
+        <g fill="currentColor" opacity="0.2" stroke="none">
           {glifo.fondo}
         </g>
       )}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
-import { Page } from '../components/Nav';
+import { Page } from '../components/AppShell';
 import {
   Badge, Button, Cell, Empty, Field, Modal, Notice, Row, Table,
 } from '../components/ui';

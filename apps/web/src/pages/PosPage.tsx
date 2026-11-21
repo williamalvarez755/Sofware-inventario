@@ -3,7 +3,7 @@ import { formatQ, toCentavos } from '@minimarket/shared';
 import { api, ApiError } from '../api/client';
 import { CameraScanner } from '../components/CameraScanner';
 import { Icon } from '../components/Icon';
-import { Nav } from '../components/Nav';
+import { Page } from '../components/AppShell';
 import { Receipt, type ReceiptData } from '../components/Receipt';
 import {
   Button,
@@ -148,36 +148,35 @@ export function PosPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <Nav />
-      <main className="surgir mx-auto max-w-[1400px] px-5 py-5">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-[hsl(var(--text-1))]">
-            Punto de venta
-          </h1>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <Select
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-              aria-label="Tienda"
-              className="w-44"
-            >
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </Select>
-            <Select
-              value={registerId}
-              onChange={(e) => setRegisterId(e.target.value)}
-              aria-label="Caja"
-              className="w-36"
-            >
-              {registers.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </Select>
-          </div>
-        </div>
+    <Page
+      title="Vender"
+      subtitle={session ? 'Escanee o escriba para agregar al carrito' : 'Abra la caja para empezar el turno'}
+      wide
+      actions={
+        <>
+          <Select
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+            aria-label="Tienda"
+            className="w-44"
+          >
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </Select>
+          <Select
+            value={registerId}
+            onChange={(e) => setRegisterId(e.target.value)}
+            aria-label="Caja"
+            className="w-36"
+          >
+            {registers.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </Select>
+        </>
+      }
+    >
 
         {sessionLoaded && !session && (
           <Panel as="form" className="mx-auto mt-14 max-w-sm p-7" onSubmit={openCashSession}>
@@ -213,7 +212,7 @@ export function PosPage() {
         )}
 
         {session && (
-          <div className="grid gap-4 lg:grid-cols-[1fr_370px]">
+          <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
             <section>
               <form onSubmit={onScanSubmit} className="flex gap-2">
                 <div className="relative flex-1">
@@ -321,7 +320,7 @@ export function PosPage() {
               </Panel>
             </section>
 
-            <aside className="lg:sticky lg:top-20 lg:h-fit">
+            <aside className="xl:sticky xl:top-[76px] xl:h-fit">
               <Panel className="p-5">
                 {!online && (
                   <div className="mb-3">
@@ -368,7 +367,6 @@ export function PosPage() {
             </aside>
           </div>
         )}
-      </main>
 
       {showPay && session && (
         <PayModal
@@ -395,7 +393,7 @@ export function PosPage() {
         />
       )}
       {receipt && <ReceiptOverlay data={receipt} onClose={() => setReceipt(null)} />}
-    </div>
+    </Page>
   );
 }
 

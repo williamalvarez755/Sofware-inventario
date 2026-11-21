@@ -157,7 +157,7 @@ export function SectionTitle({
 }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="font-display text-[15px] font-semibold text-[hsl(var(--text-1))]">
+      <h2 className="font-display text-[14.5px] font-bold text-[hsl(var(--text-1))]">
         {children}
       </h2>
       {action}
@@ -351,7 +351,7 @@ export function Modal({
   return createPortal(
     <ModalCtx.Provider value={onClose}>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[hsl(var(--bg-deep)/0.6)] p-4 backdrop-blur-md"
+        className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[hsl(var(--bg-deep)/0.55)] p-4 backdrop-blur-lg"
         onClick={onClose}
       >
         <div
@@ -368,7 +368,7 @@ export function Modal({
         >
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display text-[1.35rem] font-semibold leading-tight text-[hsl(var(--text-1))]">
+              <h2 className="font-display text-[1.3rem] font-bold leading-tight text-[hsl(var(--text-1))]">
                 {title}
               </h2>
               {description && (
@@ -395,7 +395,7 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
           <thead>
             <tr className="border-b border-[hsl(var(--border)/0.85)] bg-[hsl(var(--text-1)/0.025)]">
               {head.map((h, i) => (
-                <th key={i} className="rotulo px-4 py-3 text-left">
+                <th key={i} className="rotulo px-4 py-3.5 text-left">
                   {h}
                 </th>
               ))}
@@ -474,6 +474,8 @@ export function Stat({
   tone = 'neutral',
   icon,
   spark,
+  color: propio,
+  colorSuave,
 }: {
   label: string;
   value: string;
@@ -481,6 +483,11 @@ export function Stat({
   tone?: 'neutral' | 'accent' | 'danger';
   icon?: IconName;
   spark?: number[];
+  /** Color propio del dato (normalmente el del módulo al que pertenece).
+   *  Sin él la pastilla queda gris y la tarjeta se ve de plantilla. */
+  color?: string;
+  /** El mismo color diluido, para la pastilla y el velo. */
+  colorSuave?: string;
 }) {
   const color =
     tone === 'accent'
@@ -498,20 +505,30 @@ export function Stat({
   return (
     <Panel className="group relative overflow-hidden p-4 transition-transform duration-300 hover:-translate-y-0.5">
       {spark && spark.length > 1 && <Sparkline points={spark} tone={tone} />}
+      {/* Un velo del color del dato en la esquina del icono: tiñe la tarjeta
+          lo justo para distinguirla de la de al lado, sin pintarla. */}
+      {propio && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-8 -top-10 size-28 rounded-full opacity-[0.3] blur-2xl"
+          style={{ background: propio }}
+        />
+      )}
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="rotulo">{label}</p>
-          <p className={cx('money mt-2 text-[27px] font-extrabold leading-none', color)}>{value}</p>
+          <p className={cx('cifra mt-2 text-[27px] font-bold', color)}>{value}</p>
           {hint && <p className="mt-2 text-xs text-[hsl(var(--text-3))]">{hint}</p>}
         </div>
         {icon && (
           <span
             className={cx(
               'flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3',
-              pastilla,
+              !colorSuave && pastilla,
             )}
+            style={colorSuave ? { background: colorSuave } : undefined}
           >
-            <Icon name={icon} size={18} />
+            <Icon name={icon} size={18} color={propio} />
           </span>
         )}
       </div>

@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { formatQ, toCentavos } from '@minimarket/shared';
 import { ApiError, startImpersonation } from '../../api/client';
 import { platformApi, platformLogout } from '../../api/platformClient';
+import { BotonApariencia } from '../../components/BotonApariencia';
 import { Marca } from '../../components/Marca';
-import { ThemePicker } from '../../components/ThemePicker';
 import {
   Badge, Button, Cell, Empty, Field, IconButton, Modal, Notice, Panel,
   Row, SectionTitle, Select, Stat, Table, cx,
@@ -81,17 +81,17 @@ export function PlatformDashboardPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-[hsl(var(--border)/0.75)] bg-[hsl(var(--bg)/0.72)] backdrop-blur-2xl">
+      <header className="glass-chrome sticky top-0 z-30 rounded-none border-b border-[hsl(var(--border)/0.6)]">
         <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-5 py-3">
           <Marca size={32} />
-          <span className="font-display text-[15px] font-semibold text-[hsl(var(--text-1))]">
-            MiniMarket
+          <span className="font-display text-[15px] font-bold text-[hsl(var(--text-1))]">
+            Minimarket GT
             <span className="ml-2 rounded-md bg-[hsl(var(--accent)/0.16)] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[hsl(var(--accent-strong))]">
               Plataforma
             </span>
           </span>
           <div className="ml-auto flex items-center gap-1">
-            <ThemePicker />
+            <BotonApariencia />
             <IconButton
               icon="salir"
               label="Cerrar sesión"
