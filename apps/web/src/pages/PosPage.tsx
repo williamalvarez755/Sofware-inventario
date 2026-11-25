@@ -16,6 +16,8 @@ import {
   Select,
   cx,
 } from '../components/ui';
+import { guardarCarrito, leerCarrito } from '../lib/carrito';
+import { crearColaEscaneos } from '../lib/colaEscaneos';
 import { retryOnNetworkFailure, useOnlineStatus } from '../lib/connection';
 import { isThermalPrintingAvailable, printThermalReceipt } from '../lib/escpos';
 
@@ -42,6 +44,10 @@ export function PosPage() {
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [openingAmount, setOpeningAmount] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
+  // El carrito se guarda en disco por tienda y caja (ver `carrito.ts`): antes
+  // se perdía entero al cambiar de pantalla o al recargar, con el cliente
+  // enfrente y los productos ya pasados por el lector.
+  const saltarGuardado = useRef(true);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<ProductHit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +83,25 @@ export function PosPage() {
     loadSession().catch(() => setSessionLoaded(true));
   }, [loadSession]);
 
+  // Al entrar o al cambiar de caja, recuperar lo que hubiera quedado.
+  useEffect(() => {
+    if (!storeId || !registerId) return;
+    setCart(leerCarrito<CartLine>(storeId, registerId));
+    // El efecto de guardado corre en este mismo commit y todavía ve el
+    // carrito ANTERIOR; sin esta bandera, guardaría el viejo encima del que
+    // acabamos de restaurar.
+    saltarGuardado.current = true;
+  }, [storeId, registerId]);
+
+  useEffect(() => {
+    if (!storeId || !registerId) return;
+    if (saltarGuardado.current) {
+      saltarGuardado.current = false;
+      return;
+    }
+    guardarCarrito(storeId, registerId, cart);
+  }, [cart, storeId, registerId]);
+
   // El foco vuelve al campo de escaneo tras cada acción: el cajero trabaja
   // con el lector en la mano, no con el mouse.
   useEffect(() => {
@@ -91,8 +116,11 @@ export function PosPage() {
         : [...c, { product, qty: 1 }];
     });
     setHits(null);
-    setQuery('');
     setError(null);
+    // Ojo: aquí NO se limpia el campo. El campo se limpia al recibir el
+    // escaneo, no al terminarlo; si se limpiara aquí, se llevaría por
+    // delante el código que el lector ya escribió mientras tanto. Ese era
+    // exactamente el fallo de los escaneos perdidos.
   }, []);
 
   const lookup = useCallback(
@@ -105,7 +133,6 @@ export function PosPage() {
       if (data.rows.length === 1) return addToCart(data.rows[0]!);
       if (data.rows.length === 0) {
         setError(`Sin resultados para "${term}"`);
-        setQuery('');
         return;
       }
       setHits(data.rows);
@@ -113,10 +140,32 @@ export function PosPage() {
     [storeId, addToCart],
   );
 
-  async function onScanSubmit(e: FormEvent) {
+  // La cola se crea una sola vez, pero `lookup` cambia con la tienda: se lee
+  // por referencia para que la cola siempre use la versión vigente.
+  const lookupRef = useRef(lookup);
+  useEffect(() => {
+    lookupRef.current = lookup;
+  }, [lookup]);
+
+  /**
+   * Los escaneos entran a una cola y se procesan de uno en uno (ver
+   * `colaEscaneos.ts`). El lector no espera a la red: cuatro códigos seguidos
+   * llegaban encimados y entraba uno solo.
+   */
+  const cola = useRef(
+    crearColaEscaneos(
+      (codigo) => lookupRef.current(codigo),
+      (codigo, err) =>
+        setError(err instanceof ApiError ? err.message : `No se pudo buscar "${codigo}"`),
+    ),
+  ).current;
+
+  function onScanSubmit(e: FormEvent) {
     e.preventDefault();
     const term = query.trim();
-    if (term) await lookup(term);
+    if (!term) return;
+    setQuery(''); // primero vaciar, después buscar
+    cola.encolar(term);
   }
 
   function setQty(productId: string, qty: number) {
@@ -377,7 +426,8 @@ export function PosPage() {
           onClose={() => setShowPay(false)}
           onDone={(r) => {
             setShowPay(false);
-            setCart([]);
+            setCart([]); // el efecto de guardado borra la clave al quedar vacío
+            cola.vaciar(); // un escaneo rezagado no puede caer en la venta siguiente
             setReceipt(r);
             loadSession();
           }}
