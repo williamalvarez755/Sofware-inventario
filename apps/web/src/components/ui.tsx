@@ -450,6 +450,33 @@ export function Cell({
   );
 }
 
+/**
+ * Estado de CARGA, distinto del estado vacío.
+ *
+ * Existe porque confundirlos es mentirle a quien usa el sistema: decir "No
+ * hay turno abierto" mientras la respuesta viene en camino hace que el
+ * cajero abra un segundo turno, y decir "Sin productos" con 33 en el
+ * catálogo hace que crea que perdió el inventario. En el teléfono de una
+ * tienda esa espera llegó a durar más de siete segundos.
+ *
+ * `aria-live` para que un lector de pantalla también se entere.
+ */
+export function Cargando({ children = 'Cargando…' }: { children?: ReactNode }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col items-center gap-3 px-4 py-14 text-center"
+    >
+      <span
+        aria-hidden
+        className="size-6 animate-spin rounded-full border-2 border-[hsl(var(--text-1)/0.18)] border-t-[hsl(var(--accent))]"
+      />
+      <p className="text-sm text-[hsl(var(--text-3))]">{children}</p>
+    </div>
+  );
+}
+
 export function Empty({ children, icon }: { children: ReactNode; icon?: IconName }) {
   return (
     <div className="flex flex-col items-center gap-2 px-4 py-14 text-center">

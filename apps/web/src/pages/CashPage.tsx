@@ -8,6 +8,7 @@ import type { ReceiptData } from '../components/Receipt';
 import {
   Badge,
   Button,
+  Cargando,
   Empty,
   Field,
   Modal,
@@ -63,6 +64,9 @@ export function CashPage() {
   const [registers, setRegisters] = useState<RegisterOpt[]>([]);
   const [registerId, setRegisterId] = useState('');
   const [session, setSession] = useState<SessionDetail | null>(null);
+  // Arranca en true: al primer render todavía no se sabe si hay turno,
+  // y afirmar que no lo hay es lo que hacía que el cajero abriera otro.
+  const [cargando, setCargando] = useState(true);
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -89,13 +93,20 @@ export function CashPage() {
 
   const load = useCallback(async () => {
     if (!registerId) return;
-    const s = await api<SessionDetail | null>(`/api/cash/sessions/current?registerId=${registerId}`);
-    setSession(s);
-    setSales(
-      s
-        ? (await api<{ rows: SaleRow[] }>(`/api/sales?storeId=${storeId}&sessionId=${s.id}`)).rows
-        : [],
-    );
+    setCargando(true);
+    try {
+      const s = await api<SessionDetail | null>(
+        `/api/cash/sessions/current?registerId=${registerId}`,
+      );
+      setSession(s);
+      setSales(
+        s
+          ? (await api<{ rows: SaleRow[] }>(`/api/sales?storeId=${storeId}&sessionId=${s.id}`)).rows
+          : [],
+      );
+    } finally {
+      setCargando(false);
+    }
   }, [registerId, storeId]);
 
   useEffect(() => {
@@ -128,7 +139,13 @@ export function CashPage() {
         </div>
       )}
 
-      {!session && (
+      {cargando && (
+        <Panel className="p-10 text-center">
+          <Cargando>Buscando el turno de esta caja…</Cargando>
+        </Panel>
+      )}
+
+      {!cargando && !session && (
         <Panel className="p-10 text-center">
           <Empty icon="caja">
             No hay turno abierto en esta caja. Ábralo desde el punto de venta.
@@ -136,7 +153,7 @@ export function CashPage() {
         </Panel>
       )}
 
-      {session && (
+      {!cargando && session && (
         <div className="grid gap-4 xl:grid-cols-2">
           <Panel className="p-5">
             <div className="flex items-start justify-between gap-3">

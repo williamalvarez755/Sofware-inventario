@@ -8,6 +8,7 @@ import { Page } from '../components/AppShell';
 import {
   Badge,
   Button,
+  Cargando,
   Cell,
   Empty,
   Field,
@@ -64,6 +65,12 @@ export function ProductsPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [total, setTotal] = useState(0);
+  // Arranca en true: decir "Sin productos" antes de preguntar le hace creer
+  // al tendero que perdio su catalogo.
+  const [cargando, setCargando] = useState(true);
+  // Total sin filtro, para poder decir "1 de 33" y no "1 en el catalogo",
+  // que hacia pensar que el resto se habia borrado.
+  const [totalGeneral, setTotalGeneral] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -88,11 +95,17 @@ export function ProductsPage() {
 
   const load = useCallback(async () => {
     if (!storeId) return;
-    const params = new URLSearchParams({ storeId });
-    if (search.trim()) params.set('search', search.trim());
-    const data = await api<{ rows: ProductRow[]; total: number }>(`/api/products?${params}`);
-    setRows(data.rows);
-    setTotal(data.total);
+    setCargando(true);
+    try {
+      const params = new URLSearchParams({ storeId });
+      if (search.trim()) params.set('search', search.trim());
+      const data = await api<{ rows: ProductRow[]; total: number }>(`/api/products?${params}`);
+      setRows(data.rows);
+      setTotal(data.total);
+      if (!search.trim()) setTotalGeneral(data.total);
+    } finally {
+      setCargando(false);
+    }
   }, [storeId, search]);
 
   useEffect(() => {
@@ -127,7 +140,13 @@ export function ProductsPage() {
   return (
     <Page
       title="Productos"
-      subtitle={`${total} en el catálogo`}
+      subtitle={
+        cargando
+          ? 'Cargando…'
+          : search.trim() && totalGeneral !== null
+            ? `${total} de ${totalGeneral} en el catálogo`
+            : `${total} en el catálogo`
+      }
       wide
       actions={
         <>
@@ -223,11 +242,20 @@ export function ProductsPage() {
             </Cell>
           </Row>
         ))}
-        {rows.length === 0 && (
+        {cargando && (
+          <tr>
+            <Cell colSpan={5}>
+              <Cargando>Cargando el catálogo…</Cargando>
+            </Cell>
+          </tr>
+        )}
+        {!cargando && rows.length === 0 && (
           <tr>
             <Cell colSpan={5}>
               <Empty icon="productos">
-                Sin productos. {!isWorkerOnly && 'Cree el primero o importe un CSV.'}
+                {search.trim()
+                  ? `Ningún producto coincide con “${search.trim()}”`
+                  : `Sin productos. ${!isWorkerOnly ? 'Cree el primero o importe un CSV.' : ''}`}
               </Empty>
             </Cell>
           </tr>
