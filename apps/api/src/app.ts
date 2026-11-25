@@ -62,6 +62,35 @@ export function createApp() {
     .filter((o) => o.length > 0);
   logger.info({ allowedOrigins }, 'CORS configurado');
   app.use(cors({ origin: allowedOrigins, credentials: false }));
+
+  /**
+   * Cuerpos comprimidos: rechazados.
+   *
+   * Nada de lo que manda este sistema los usa — la aplicación web envía JSON
+   * plano y el CSV de importación va en texto — así que aceptarlos solo
+   * agrega superficie de ataque. Y la agrega de verdad: `body-parser` 2.3.0,
+   * que es la que arrastra Express 5.3.0, tiene un aviso de denegación de
+   * servicio por bytes de más después de un cuerpo comprimido
+   * (GHSA-27r3-jxmh-p828). Un `override` de npm no prende en este monorepo
+   * —bug conocido de npm 10 con workspaces, deja el árbol en estado inválido
+   * y eso sí rompería el build—, pero la ruta vulnerable requiere
+   * `Content-Encoding`, así que cerrarla aquí la elimina por completo y no
+   * depende de que una dependencia transitiva suba de versión.
+   *
+   * Va ANTES de `express.json` a propósito: el objetivo es que el cuerpo
+   * comprimido nunca llegue al parser.
+   */
+  app.use((req, res, next) => {
+    const encoding = req.headers['content-encoding'];
+    if (encoding && encoding.trim().toLowerCase() !== 'identity') {
+      res.status(415).json({
+        error: { code: 'ENCODING_NO_SOPORTADA', message: 'No se aceptan cuerpos comprimidos' },
+      });
+      return;
+    }
+    next();
+  });
+
   app.use(express.json({ limit: '1mb' }));
   app.use(
     pinoHttp({

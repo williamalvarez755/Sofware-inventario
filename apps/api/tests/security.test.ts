@@ -209,3 +209,35 @@ describe('Sesiones', () => {
     await prismaAdmin.user.update({ where: { id: user.id }, data: { isActive: true } });
   });
 });
+
+describe('Cuerpos comprimidos', () => {
+  /**
+   * El API no tiene ningún cliente que comprima: la aplicación web manda JSON
+   * plano y el import de catálogo manda texto. Aceptar `Content-Encoding` solo
+   * abría la ruta del aviso de denegación de servicio de body-parser
+   * (GHSA-27r3-jxmh-p828), así que se rechaza antes de llegar al parser.
+   */
+  it('rechaza Content-Encoding: gzip con 415, sin pasar por el parser', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Encoding', 'gzip')
+      .set('Content-Type', 'application/json')
+      .send(Buffer.from('{"email":"a@b.c","password":"x"}'));
+
+    expect(res.status).toBe(415);
+    expect(res.body.error.code).toBe('ENCODING_NO_SOPORTADA');
+  });
+
+  it('deja pasar identity y la ausencia de la cabecera', async () => {
+    const conIdentity = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Encoding', 'identity')
+      .send({ email: 'owner1@demo.local', password: PASSWORD });
+    expect(conIdentity.status).toBe(200);
+
+    const sinCabecera = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'owner1@demo.local', password: PASSWORD });
+    expect(sinCabecera.status).toBe(200);
+  });
+});

@@ -276,8 +276,22 @@ async function seedDemoProducts(tenantId: string, storeId: string, userId: strin
   }
 }
 
-// En producción: SEED_DEMO_TENANTS=false para no crear los tenants demo.
-const INCLUDE_DEMOS = process.env.SEED_DEMO_TENANTS !== 'false';
+/**
+ * Los tenants demo son OPCIONALES y hay que pedirlos a propósito.
+ *
+ * Antes la condición era `!== 'false'`, es decir: se creaban salvo que
+ * alguien se acordara de apagarlos. Eso falla abierto, y aquí el costo de
+ * fallar abierto es alto: la contraseña demo está en este archivo, el
+ * repositorio es público, y olvidar la variable en el servidor deja una
+ * cuenta conocida con acceso a un tenant real de la misma base.
+ *
+ * Además se niega en producción aunque la variable venga en `true`: no hay
+ * ningún motivo legítimo para tener "Tienda La Bendición" en el servidor que
+ * atiende clientes, y un `.env` copiado de la laptop es un accidente normal.
+ */
+const PIDE_DEMOS = process.env.SEED_DEMO_TENANTS === 'true';
+const ES_PRODUCCION = process.env.NODE_ENV === 'production';
+const INCLUDE_DEMOS = PIDE_DEMOS && !ES_PRODUCCION;
 
 async function main() {
   await seedRbac();
@@ -285,6 +299,9 @@ async function main() {
   await seedPlans();
   await seedPlatformUser();
   if (!INCLUDE_DEMOS) {
+    if (PIDE_DEMOS && ES_PRODUCCION) {
+      console.log('SEED_DEMO_TENANTS=true IGNORADO: no se siembran demos en producción.');
+    }
     console.log('Seed completado (sin tenants demo) ✔');
     return;
   }
