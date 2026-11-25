@@ -160,10 +160,17 @@ function NewPurchaseModal({
 
   async function searchProducts() {
     if (!query.trim()) return;
-    const data = await api<{ rows: ProductHit[] }>(
-      `/api/products?storeId=${storeId}&search=${encodeURIComponent(query.trim())}`,
-    );
-    setHits(data.rows.slice(0, 6));
+    // Si la búsqueda falla, hay que DECIRLO. Antes el rechazo se perdía sin
+    // manejar y el usuario solo veía que Enter no hacía nada y el texto se
+    // quedaba en el campo (informe E4).
+    try {
+      const params = new URLSearchParams({ search: query.trim() });
+      if (storeId) params.set('storeId', storeId);
+      const data = await api<{ rows: ProductHit[] }>(`/api/products?${params}`);
+      setHits(data.rows.slice(0, 6));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No se pudo buscar el producto');
+    }
   }
 
   function addLine(product: ProductHit) {

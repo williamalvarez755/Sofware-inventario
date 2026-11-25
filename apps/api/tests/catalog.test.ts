@@ -248,3 +248,34 @@ describe('Importación CSV', () => {
     expect(elapsed).toBeLessThan(30_000);
   }, 45_000);
 });
+
+describe('Parámetros vacíos en la URL', () => {
+  /**
+   * El informe: "A veces el primer Enter no hace nada y el texto se queda en
+   * el buscador. Pasó con el código de Doritos recién entrando a Vender y con
+   * 'incaparina' en Nueva compra. El segundo Enter funcionó."
+   *
+   * La causa está aquí: la lista de tiendas carga de forma asíncrona, así que
+   * durante el primer segundo la pantalla arma `?storeId=&search=incaparina`.
+   * Un `storeId` vacío no es un identificador inválido — es un identificador
+   * que todavía no llegó — y rechazarlo con 400 convierte una carrera normal
+   * de la interfaz en un error que el cajero ve como "no pasó nada".
+   */
+  it('trata ?storeId= vacío como ausente, no como inválido', async () => {
+    const res = await request(app)
+      .get('/api/products?storeId=&search=a')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.rows)).toBe(true);
+  });
+
+  it('un storeId con basura sí se rechaza', async () => {
+    // Vacío es "todavía no"; "abc" es un error de verdad y debe doler.
+    const res = await request(app)
+      .get('/api/products?storeId=abc&search=a')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    expect(res.status).toBe(400);
+  });
+});

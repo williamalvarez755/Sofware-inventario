@@ -154,10 +154,26 @@ export const storeProductSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+/**
+ * Identificador OPCIONAL que llega por la URL.
+ *
+ * Un parámetro vacío (`?storeId=`) no es un identificador inválido: es uno
+ * que todavía no llegó. Las pantallas cargan la lista de tiendas de forma
+ * asíncrona, así que durante el primer segundo arman la URL sin valor, y
+ * rechazar eso con 400 convierte una carrera normal de la interfaz en un
+ * error que el cajero ve como "presioné Enter y no pasó nada".
+ *
+ * Vacío se trata como ausente. Basura ("abc") sigue siendo un 400.
+ */
+const uuidOpcionalEnUrl = z.preprocess(
+  (v) => (v === '' ? undefined : v),
+  z.string().uuid().optional(),
+);
+
 export const productListQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
-  categoryId: z.string().uuid().optional(),
-  storeId: z.string().uuid().optional(),
+  categoryId: uuidOpcionalEnUrl,
+  storeId: uuidOpcionalEnUrl,
   page: z.coerce.number().int().min(1).default(1),
 });
 
@@ -373,7 +389,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use el formato AAAA-MM-
 
 export const reportRangeSchema = z
   .object({
-    storeId: z.string().uuid().optional(), // omitido = todas las tiendas visibles
+    storeId: uuidOpcionalEnUrl, // omitido = todas las tiendas visibles
     from: isoDate,
     to: isoDate,
     format: z.enum(['json', 'csv']).default('json'),
@@ -386,7 +402,7 @@ export const salesReportSchema = reportRangeSchema.innerType().extend({
 });
 
 export const auditQuerySchema = z.object({
-  storeId: z.string().uuid().optional(),
+  storeId: uuidOpcionalEnUrl,
   action: z.string().trim().max(60).optional(),
   userId: z.string().uuid().optional(),
   from: isoDate.optional(),
