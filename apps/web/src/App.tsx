@@ -14,6 +14,7 @@ import { ProductsPage } from './pages/ProductsPage';
 import { PurchasesPage } from './pages/PurchasesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SuppliersPage } from './pages/SuppliersPage';
+import { UsersPage } from './pages/UsersPage';
 import { PlatformDashboardPage } from './pages/platform/PlatformDashboardPage';
 
 function Cargando() {
@@ -54,6 +55,7 @@ const PROTEGIDAS: [string, React.ReactElement][] = [
   ['/compras', <PurchasesPage key="co" />],
   ['/gastos', <ExpensesPage key="g" />],
   ['/proveedores', <SuppliersPage key="s" />],
+  ['/usuarios', <UsersPage key="u" />],
   ['/reportes', <ReportsPage key="r" />],
 ];
 

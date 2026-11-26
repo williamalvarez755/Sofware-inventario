@@ -124,6 +124,14 @@ export const GRUPOS: GrupoModulos[] = [
         alias: ['egresos', 'pagos', 'servicios'],
       },
       {
+        to: '/usuarios',
+        label: 'Usuarios',
+        icon: 'usuario',
+        tono: 'usuarios',
+        desc: 'Quién entra y qué puede hacer',
+        alias: ['cajeros', 'empleados', 'permisos', 'roles', 'personal'],
+      },
+      {
         to: '/reportes',
         label: 'Reportes',
         icon: 'reportes',

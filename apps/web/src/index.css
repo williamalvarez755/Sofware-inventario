@@ -90,6 +90,7 @@
   --tono-compras: 190 52% 57%;
   --tono-proveedores: 20 62% 65%;
   --tono-gastos: 340 55% 69%;
+  --tono-usuarios: 92 38% 58%;
   --tono-reportes: 232 62% 73%;
 
   /* Material del vidrio. Sobre un suelo profundo el canto puede brillar más
@@ -148,6 +149,7 @@
   --tono-compras: 192 62% 33%;
   --tono-proveedores: 18 62% 45%;
   --tono-gastos: 340 54% 46%;
+  --tono-usuarios: 95 42% 32%;
   --tono-reportes: 233 52% 51%;
 
   /* Sobre papel el vidrio se hace con BLANCO, no con un velo claro: la
