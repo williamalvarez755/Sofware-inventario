@@ -41,10 +41,26 @@ beforeAll(async () => {
   const stamp = Date.now();
   const [conAcceso, sinAcceso] = await Promise.all([
     prismaAdmin.store.create({
-      data: { id: uuidv7(), tenantId: tenantA.id, name: `Sucursal propia ${stamp}` },
+      // `isActive: false` NO es un detalle: los ledgers son inmutables, asi que
+      // esta tienda no se podra borrar nunca. Activa, se quedaria para siempre
+      // en el selector del punto de venta del tenant demo — llegaron a ser 122
+      // contra 1 real. Inactiva no se ofrece, y el acceso por identificador
+      // sigue funcionando, que es lo que estas pruebas necesitan.
+      data: {
+        id: uuidv7(),
+        tenantId: tenantA.id,
+        name: `Sucursal propia ${stamp}`,
+        isActive: false,
+      },
     }),
     prismaAdmin.store.create({
-      data: { id: uuidv7(), tenantId: tenantA.id, name: `Sucursal ajena ${stamp}` },
+      // Inactiva por lo mismo: el ledger la hace inmortal (ver arriba).
+      data: {
+        id: uuidv7(),
+        tenantId: tenantA.id,
+        name: `Sucursal ajena ${stamp}`,
+        isActive: false,
+      },
     }),
   ]);
   storeConAcceso = conAcceso.id;
@@ -178,6 +194,40 @@ describe('4. Ingreso unificado (D-041)', () => {
   });
 });
 
+describe('5. El selector de tiendas no ofrece las inactivas', () => {
+  it('una tienda dada de baja desaparece del listado, pero sigue operable', async () => {
+    // POR QUÉ IMPORTA, Y NO ES COSMÉTICO. `stores.is_active` existía desde la
+    // Fase 0 y ningún listado lo filtraba: una sucursal cerrada seguía
+    // apareciendo en el selector del punto de venta, lista para venderle.
+    //
+    // Y hay una razón estructural: los ledgers son inmutables (D-007), así que
+    // una tienda NO SE PUEDE BORRAR NUNCA. Sin este filtro, cada tienda creada
+    // por error —o por una prueba como esta— se queda para siempre en la lista
+    // que el cajero ve al abrir turno. En la base de desarrollo llegaron a ser
+    // 122 contra 1 real.
+    //
+    // Las tiendas que crea este archivo nacen inactivas justamente por eso, y
+    // esta prueba comprueba las dos mitades de la regla.
+    const lista = await request(app)
+      .get('/api/stores')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(lista.status).toBe(200);
+
+    const ids = (lista.body as { id: string }[]).map((t) => t.id);
+    expect(ids).not.toContain(storeConAcceso);
+    expect(ids).not.toContain(storeSinAcceso);
+    // Todas las que sí vienen están activas: no se cuela ninguna.
+    expect((lista.body as { isActive: boolean }[]).every((t) => t.isActive)).toBe(true);
+
+    // La otra mitad: inactiva NO significa inaccesible. Cerrar una sucursal no
+    // puede romper un turno en curso ni esconder su historial de los reportes.
+    const kardex = await request(app)
+      .get(`/api/inventory/low-stock?storeId=${storeConAcceso}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(kardex.status).toBe(200);
+  });
+});
+
 describe('2. Membresía de tienda exigida en mutaciones sensibles', () => {
   it('no puede abrir ni mover la caja de una sucursal donde no es miembro', async () => {
     // El dueño abre la caja de la sucursal ajena
@@ -307,7 +357,17 @@ describe('3. Descuentos: los reportes ya no inflan los ingresos', () => {
   it('una venta con descuento se reporta por su total real, no por el bruto', async () => {
     const stamp = Date.now();
     const store = await prismaAdmin.store.create({
-      data: { id: uuidv7(), tenantId: tenantA.id, name: `Descuentos ${stamp}` },
+      // `isActive: false` NO es un detalle: los ledgers son inmutables, asi que
+      // esta tienda no se podra borrar nunca. Activa, se quedaria para siempre
+      // en el selector del punto de venta del tenant demo — llegaron a ser 122
+      // contra 1 real. Inactiva no se ofrece, y el acceso por identificador
+      // sigue funcionando, que es lo que estas pruebas necesitan.
+      data: {
+        id: uuidv7(),
+        tenantId: tenantA.id,
+        name: `Descuentos ${stamp}`,
+        isActive: false,
+      },
     });
     await prismaAdmin.storeMember.create({
       data: { id: uuidv7(), tenantId: tenantA.id, storeId: store.id, userId: ownerId, role: 'OWNER' },

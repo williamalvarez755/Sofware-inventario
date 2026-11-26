@@ -7,11 +7,31 @@ import { audit } from '../audit/audit.service.js';
 
 type Membership = { storeId: string; role: string };
 
-/** OWNER ve todas las tiendas del tenant; los demás, solo donde son miembros. */
+/**
+ * OWNER ve todas las tiendas del tenant; los demás, solo donde son miembros.
+ *
+ * LAS INACTIVAS NO SE OFRECEN. `stores.is_active` existía desde la Fase 0 y
+ * **ningún listado lo filtraba**: una tienda dada de baja seguía apareciendo
+ * en el selector del punto de venta, lista para venderle. Eso convertía la
+ * columna en adorno y, peor, dejaba cobrar en una sucursal cerrada.
+ *
+ * Importa además por una razón que no es de negocio: los ledgers son
+ * inmutables por diseño (D-007), así que una tienda **no se puede borrar
+ * nunca**. Sin este filtro, cada tienda creada por error o por una prueba se
+ * queda para siempre en la lista que el cajero ve al abrir turno. En la base
+ * de desarrollo llegaron a ser 122 contra 1 real.
+ *
+ * El acceso NO se toca: `canAccessStore` sigue permitiendo operar una tienda
+ * inactiva si alguien tiene su identificador, porque cerrar una sucursal no
+ * debe romper un turno en curso ni esconder su historial en los reportes.
+ */
 export async function listVisibleStores(db: TenantClient, memberships: Membership[]) {
   const isOwner = memberships.some((m) => m.role === 'OWNER');
   return db.store.findMany({
-    where: isOwner ? {} : { id: { in: memberships.map((m) => m.storeId) } },
+    where: {
+      isActive: true,
+      ...(isOwner ? {} : { id: { in: memberships.map((m) => m.storeId) } }),
+    },
     orderBy: { createdAt: 'asc' },
     select: { id: true, name: true, address: true, phone: true, isActive: true },
   });

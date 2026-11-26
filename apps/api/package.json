@@ -14,6 +14,7 @@
     "db:reset": "prisma migrate reset --force",
     "check:stock": "tsx scripts/check-stock.ts",
     "load-test": "tsx scripts/load-test.ts",
+    "limpiar:tiendas": "tsx scripts/limpiar-tiendas-de-prueba.ts",
     "test": "vitest run"
   },
   "prisma": {

@@ -108,7 +108,17 @@ beforeAll(async () => {
   // hacerlo por API consumiría un cupo del plan en cada ejecución. El límite de
   // tiendas por plan es una regla de negocio y se prueba en platform.test.ts.
   const store = await prismaAdmin.store.create({
-    data: { id: uuidv7(), tenantId: tenantA.id, name: `Reportes ${Date.now()}` },
+    // `isActive: false` NO es un detalle: los ledgers son inmutables, asi que
+    // esta tienda no se podra borrar nunca. Activa, se quedaria para siempre
+    // en el selector del punto de venta del tenant demo — llegaron a ser 122
+    // contra 1 real. Inactiva no se ofrece, y el acceso por identificador
+    // sigue funcionando, que es lo que estas pruebas necesitan.
+    data: {
+      id: uuidv7(),
+      tenantId: tenantA.id,
+      name: `Reportes ${Date.now()}`,
+      isActive: false,
+    },
   });
   storeId = store.id;
 
