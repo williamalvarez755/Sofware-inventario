@@ -192,7 +192,16 @@ export function getProfitByProduct(tenantId: string, params: RangeParams) {
         cost: r.cost.toString(),
         profit: r.profit.toString(),
         // Margen bruto sobre venta, en puntos porcentuales con 1 decimal.
-        marginPct: revenue > 0n ? Number((r.profit * 1000n) / revenue) / 10 : 0,
+        //
+        // Se REDONDEA, no se trunca. La division de BigInt descarta el resto,
+        // asi que 26.67 % salia "26.6 %" y 20.45 % salia "20.4 %": siempre
+        // hacia abajo, nunca al valor mas cercano.
+        //
+        // Aqui si conviene pasar por punto flotante: el margen es un dato de
+        // PRESENTACION, no dinero que haya que cuadrar, y los centavos caben
+        // de sobra en un Number (el limite seguro son ~9e15, o sea noventa
+        // billones de quetzales). Las cifras de dinero siguen en BigInt.
+        marginPct: revenue > 0n ? Math.round((Number(r.profit) / Number(revenue)) * 10000) / 100 : 0,
       };
     });
   });

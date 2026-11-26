@@ -228,9 +228,12 @@ describe('Dashboard y reconciliación con los ledgers', () => {
     expect(a.revenue).toBe('12000');
     expect(a.cost).toBe('7000');
     expect(a.profit).toBe('5000');
-    expect(a.marginPct).toBeCloseTo(41.6, 1); // 5000/12000
+    // 5000/12000 = 41.6667 %. Antes esta prueba afirmaba 41.6: estaba
+    // fijando el truncamiento, que era el defecto. Ahora se exige el valor
+    // redondeado y exacto, sin tolerancia.
+    expect(a.marginPct).toBe(41.67);
     expect(b.profit).toBe('2500');
-    expect(b.marginPct).toBeCloseTo(25.0, 1);
+    expect(b.marginPct).toBe(25);
     // La suma por producto es el total del dashboard
     const sum = res.body.reduce((acc: bigint, r: { profit: string }) => acc + BigInt(r.profit), 0n);
     expect(sum.toString()).toBe('7500');
@@ -524,5 +527,24 @@ describe('Rendimiento', () => {
     const elapsed = Date.now() - startedAt;
     expect(res.status).toBe(200);
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+describe('Redondeo del margen (informe, prioridad Baja)', () => {
+  /**
+   * El informe: "El margen se corta en vez de redondear: 26.67 % sale
+   * '26.6 %' y 20.45 % sale '20.4 %'". La causa era que la división de
+   * BigInt descarta el resto, así que el error siempre iba hacia abajo.
+   */
+  it('redondea al centésimo más cercano en vez de truncar', () => {
+    // La fórmula del servicio, aislada: venta 150.00, utilidad 40.00.
+    const margen = (profit: bigint, revenue: bigint) =>
+      revenue > 0n ? Math.round((Number(profit) / Number(revenue)) * 10000) / 100 : 0;
+
+    expect(margen(4000n, 15000n)).toBe(26.67); // antes daba 26.6
+    expect(margen(2250n, 11000n)).toBe(20.45); // antes daba 20.4
+    expect(margen(5000n, 10000n)).toBe(50);
+    expect(margen(0n, 10000n)).toBe(0);
+    expect(margen(1000n, 0n)).toBe(0); // sin venta no hay margen que calcular
   });
 });
