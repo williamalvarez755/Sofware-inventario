@@ -27,6 +27,7 @@ import { purchasesRouter } from './modules/purchasing/purchases.router.js';
 import { suppliersRouter } from './modules/purchasing/suppliers.router.js';
 import { salesRouter } from './modules/sales/sales.router.js';
 import { storesRouter } from './modules/tenancy/stores.router.js';
+import { usersRouter } from './modules/tenancy/users.router.js';
 
 export function createApp() {
   const app = express();
@@ -110,6 +111,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/auth/2fa', twoFactorRouter);
   app.use('/api/stores', storesRouter);
+  app.use('/api/users', usersRouter);
   app.use('/api/products', productsRouter);
   app.use('/api/categories', categoriesRouter);
   app.use('/api/units', unitsRouter);

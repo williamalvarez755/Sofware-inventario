@@ -454,3 +454,45 @@ export const CRITICAL_ACTIONS = [
   'auth.login_failed',
   'auth.refresh_reuse_detected',
 ] as const;
+
+// ---- Usuarios de la tienda (seguridad: hace alcanzable el RBAC) ----
+
+/** Nombre de usuario: corto, sin espacios y facil de teclear en el mostrador. */
+const nombreDeUsuario = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, 'Muy corto')
+  .max(32)
+  .regex(/^[a-z0-9._-]+$/, 'Use solo letras, numeros, punto, guion o guion bajo');
+
+export const ROLES_TIENDA = ['OWNER', 'STORE_ADMIN', 'WORKER'] as const;
+
+export const userCreateSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  username: nombreDeUsuario,
+  email: z.string().email().toLowerCase().trim().optional(),
+  phone: telefono.optional(),
+  role: z.enum(ROLES_TIENDA),
+  storeIds: z.array(z.string().uuid()).min(1, 'Asigne al menos una tienda'),
+  /**
+   * El dueno puede dictar la clave inicial en vez de usar la generada: a
+   * veces el cajero esta enfrente y prefiere una que recuerde. En los dos
+   * casos queda marcada como temporal.
+   */
+  password: z.string().min(8, 'Minimo 8 caracteres').max(72).optional(),
+});
+export type UserCreateInput = z.infer<typeof userCreateSchema>;
+
+export const userUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  email: z.string().email().toLowerCase().trim().nullable().optional(),
+  phone: telefono.nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const userAssignStoresSchema = z.object({
+  stores: z
+    .array(z.object({ storeId: z.string().uuid(), role: z.enum(ROLES_TIENDA) }))
+    .min(1, 'Asigne al menos una tienda'),
+});
