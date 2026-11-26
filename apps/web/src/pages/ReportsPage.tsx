@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatQ } from '@minimarket/shared';
 import { api, ApiError, downloadCsv } from '../api/client';
 import { Page } from '../components/AppShell';
@@ -160,12 +160,37 @@ export function ReportsPage() {
     api<StoreRow[]>('/api/stores').then(setStores).catch(() => setStores([]));
   }, []);
 
+  /**
+   * Carga con descarte de respuestas viejas.
+   *
+   * El informe: al cambiar de tipo de reporte, la tabla mostraba los datos
+   * del anterior con las columnas nuevas y luego "Error cargando el
+   * reporte". Eran dos cosas a la vez:
+   *
+   *   1. No se vaciaban las filas al cambiar. Las columnas se toman del
+   *      reporte nuevo y las filas seguían siendo las viejas, así que la
+   *      tabla pintaba celdas vacías bajo encabezados que no correspondían.
+   *   2. No se descartaba la petición anterior. Dos cargas en vuelo
+   *      competían y ganaba la que respondiera de último, que podía ser la
+   *      del reporte que ya nadie está mirando — y si esa fallaba, dejaba
+   *      su error en pantalla sobre un reporte que había cargado bien.
+   *
+   * El contador resuelve las dos: cada carga se queda con su número y solo
+   * escribe en el estado si sigue siendo la vigente.
+   */
+  const cargaVigente = useRef(0);
+
   const load = useCallback(async () => {
+    const miCarga = ++cargaVigente.current;
     setLoading(true);
     setError(null);
+    setRows([]); // nunca mostrar datos de un reporte con las columnas de otro
     try {
-      setRows(await api<Record<string, unknown>[]>(`/api/reports/${report.path}?${query}`));
+      const datos = await api<Record<string, unknown>[]>(`/api/reports/${report.path}?${query}`);
+      if (cargaVigente.current !== miCarga) return; // llegó tarde: ya no importa
+      setRows(datos);
     } catch (e) {
+      if (cargaVigente.current !== miCarga) return;
       setRows([]);
       setError(
         e instanceof ApiError && e.status === 403
@@ -173,7 +198,7 @@ export function ReportsPage() {
           : 'Error cargando el reporte',
       );
     } finally {
-      setLoading(false);
+      if (cargaVigente.current === miCarga) setLoading(false);
     }
   }, [report.path, query]);
 
