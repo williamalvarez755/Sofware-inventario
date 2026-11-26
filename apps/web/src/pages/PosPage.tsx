@@ -434,11 +434,18 @@ export function PosPage() {
         />
       )}
       {showCamera && (
+        /**
+         * En el punto de venta la cámara va en modo CONTINUO: una compra son
+         * varios productos, y cerrar el visor tras cada uno obliga a volver a
+         * abrirlo, esperar el enfoque y apuntar de nuevo por cada artículo.
+         *
+         * Los códigos pasan por la MISMA cola que el lector físico: así la
+         * cámara hereda el orden y la tolerancia a fallos que resolvieron los
+         * escaneos perdidos, en vez de tener su propio camino.
+         */
         <CameraScanner
-          onDetected={(code) => {
-            setShowCamera(false);
-            lookup(code).catch(() => setError('Error al buscar el producto'));
-          }}
+          continuo
+          onDetected={(code) => cola.encolar(code)}
           onClose={() => setShowCamera(false)}
         />
       )}

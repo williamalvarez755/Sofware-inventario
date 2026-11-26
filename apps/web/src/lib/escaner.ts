@@ -150,6 +150,53 @@ export async function pedirEnfoqueContinuo(track: MediaStreamTrack | null): Prom
   }
 }
 
+/**
+ * Vuelve a enfocar, a pedido.
+ *
+ * El enfoque continuo resuelve la mayoría de los casos, pero se queda pegado
+ * cuando el fondo tiene más contraste que el código — un mostrador de vidrio,
+ * una bolsa brillante. Tocar la pantalla fuerza una pasada nueva, que es el
+ * gesto que la gente ya hace por costumbre con la cámara del teléfono.
+ *
+ * Se pide `single-shot` y se vuelve a `continuous`: pedir dos veces seguidas
+ * `continuous` no reinicia nada en la mayoría de los equipos.
+ */
+export async function reenfocar(track: MediaStreamTrack | null): Promise<void> {
+  if (!track) return;
+  try {
+    await track.applyConstraints({
+      advanced: [{ focusMode: 'single-shot' } as MediaTrackConstraintSet],
+    });
+    await track.applyConstraints({
+      advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+    });
+  } catch {
+    /* el equipo no deja controlar el enfoque: el gesto simplemente no hace nada */
+  }
+}
+
+const CLAVE_LINTERNA = 'mm.escaner.linterna';
+
+/**
+ * La preferencia de linterna se recuerda por equipo: una tienda oscura lo es
+ * todos los días, y obligar a encenderla en cada escaneo es fricción pura.
+ */
+export function linternaRecordada(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_LINTERNA) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function recordarLinterna(encendida: boolean): void {
+  try {
+    localStorage.setItem(CLAVE_LINTERNA, encendida ? '1' : '0');
+  } catch {
+    /* sin persistencia: hay que encenderla cada vez */
+  }
+}
+
 // ──────────────────────────────── Realimentación ────────────────────────────
 
 /**
@@ -272,4 +319,92 @@ export const ANCHO_MAXIMO_ZXING = 1024;
 export function escalaParaDecodificar(ancho: number, maximo = ANCHO_MAXIMO_ZXING): number {
   if (ancho <= 0) return 1;
   return Math.min(1, maximo / ancho);
+}
+
+// ─────────────────────── Luz: por qué "a veces no da" ──────────────────────
+
+/**
+ * Luminancia media de un cuadro, de 0 (negro) a 1 (blanco).
+ *
+ * Se mide para poder DECIR por qué no lee. Un código de barras necesita
+ * contraste; si el cuadro viene oscuro, ninguna cantidad de insistencia lo
+ * va a decodificar, y lo único útil es encender la linterna. Sin esta
+ * medición, el escáner solo puede quedarse callado mientras falla, que es
+ * exactamente lo que reportó el dueño como "en algunos entornos no da".
+ *
+ * Se muestrea 1 de cada 16 píxeles: la media no necesita más y recorrer un
+ * cuadro entero por cada fotograma sí se nota.
+ */
+export function luminanciaMedia(datos: Uint8ClampedArray): number {
+  if (datos.length < 4) return 1;
+  let suma = 0;
+  let cuenta = 0;
+  // Coeficientes de luminancia percibida (Rec. 601), que es lo que importa
+  // para el contraste de unas barras negras sobre fondo blanco.
+  for (let i = 0; i < datos.length; i += 4 * 16) {
+    suma += 0.299 * datos[i]! + 0.587 * datos[i + 1]! + 0.114 * datos[i + 2]!;
+    cuenta += 1;
+  }
+  return cuenta === 0 ? 1 : suma / cuenta / 255;
+}
+
+/** Por debajo de esto, el problema es la luz y no el lector. */
+export const UMBRAL_POCA_LUZ = 0.25;
+
+export function hayPocaLuz(luminancia: number): boolean {
+  return luminancia < UMBRAL_POCA_LUZ;
+}
+
+// ───────────────────── Modo continuo: no repetir el mismo ───────────────────
+
+/**
+ * Antirrebote por código.
+ *
+ * En modo continuo la cámara ve el mismo código treinta veces por segundo. Sin
+ * esto, apoyar un producto frente al lente agregaría treinta unidades al
+ * carrito. Se bloquea el MISMO código durante un rato, pero uno distinto entra
+ * de inmediato: el cajero pasa productos seguidos sin esperar.
+ */
+export function crearAntirrebote(ventanaMs = 1800) {
+  const vistos = new Map<string, number>();
+  return {
+    aceptar(codigo: string, ahora: number = Date.now()): boolean {
+      const ultimo = vistos.get(codigo);
+      if (ultimo !== undefined && ahora - ultimo < ventanaMs) return false;
+      vistos.set(codigo, ahora);
+      return true;
+    },
+    olvidar(codigo: string) {
+      vistos.delete(codigo);
+    },
+  };
+}
+
+// ──────────────────────── Qué decirle a quien escanea ───────────────────────
+
+export interface EstadoAyuda {
+  msSinLeer: number;
+  pocaLuz: boolean;
+  linterna: boolean;
+  hayLinterna: boolean;
+}
+
+/**
+ * El mensaje que se muestra bajo el visor.
+ *
+ * Callarse mientras falla es la peor opción: quien escanea no sabe si el
+ * problema es la distancia, la luz o el código. Los consejos salen en el
+ * orden en que resuelven el problema más veces, y solo después de un par de
+ * segundos — antes de eso el escaneo normal ya habría entrado y un mensaje
+ * sería ruido.
+ */
+export function mensajeDeAyuda(estado: EstadoAyuda): string | null {
+  if (estado.msSinLeer < 2000) return null;
+  if (estado.pocaLuz && estado.hayLinterna && !estado.linterna) {
+    return 'Hay poca luz: encienda la linterna';
+  }
+  if (estado.pocaLuz) return 'Hay poca luz: acerque el producto a una lámpara';
+  if (estado.msSinLeer < 5000) return 'Acerque o aleje el código despacio';
+  if (estado.msSinLeer < 9000) return 'Evite el reflejo: incline un poco el producto';
+  return 'Si no entra, escriba el código a mano';
 }

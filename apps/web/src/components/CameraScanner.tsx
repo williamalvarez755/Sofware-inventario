@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   type Camara,
   type Capacidades,
@@ -6,11 +6,18 @@ import {
   cambiarLinterna,
   cambiarZoom,
   confirmarEscaneo,
+  crearAntirrebote,
   escalaParaDecodificar,
+  hayPocaLuz,
   leerCapacidades,
+  linternaRecordada,
   listarCamaras,
+  luminanciaMedia,
+  mensajeDeAyuda,
   pedirEnfoqueContinuo,
   recordarCamara,
+  recordarLinterna,
+  reenfocar,
   regionDeInteres,
   tocaCuadroCompleto,
 } from '../lib/escaner';
@@ -19,33 +26,26 @@ import { Icon } from './Icon';
 /**
  * Escáner por cámara del POS (D-010, respaldo del lector físico).
  *
- * POR QUÉ SE REHIZO. La versión anterior funcionaba en el escritorio del
- * desarrollador y fallaba en el mostrador. Cuatro causas, todas de velocidad
- * o de luz:
+ * Lo que se arregló y por qué, porque cada cosa responde a una falla real en
+ * un mostrador y no a una idea bonita:
  *
- *  1. DECODIFICABA EL MISMO CUADRO VARIAS VECES. El bucle iba en
- *     `requestAnimationFrame` (~60 Hz) sobre una cámara de 30 fps: la mitad
- *     de las pasadas analizaban una imagen ya analizada, y cada pasada cuesta
- *     decenas de milisegundos. Ahora usa `requestVideoFrameCallback`, que
- *     dispara UNA vez por cuadro nuevo; donde no existe, cae a rAF.
- *  2. ANALIZABA LOS 2 MILLONES DE PÍXELES DEL CUADRO. Ahora recorta la franja
- *     central —donde el cajero apunta— y analiza una tercera parte. Cada
- *     cinco cuadros mira el cuadro completo, para no castigar a quien apunta
- *     mal.
- *  3. NO PEDÍA ENFOQUE CONTINUO. Es la causa número uno de "a veces no lee":
- *     la cámara enfoca el fondo y el código queda borroso.
- *  4. NO PEDÍA RESOLUCIÓN. Por omisión muchos equipos entregan 640×480, y un
- *     EAN-13 a esa resolución está en el límite de lo decodificable.
+ *  · DECODIFICABA EL MISMO CUADRO VARIAS VECES. El bucle iba en
+ *    `requestAnimationFrame` (~60 Hz) sobre una cámara de 30 fps. Ahora usa
+ *    `requestVideoFrameCallback`: una pasada por cuadro NUEVO.
+ *  · ANALIZABA EL CUADRO COMPLETO. Ahora recorta la franja central —un tercio
+ *    de los píxeles— y mira el cuadro entero cada cinco, para no castigar a
+ *    quien apunta mal.
+ *  · NO PEDÍA ENFOQUE CONTINUO. Causa número uno de "a veces no lee".
+ *  · NO PEDÍA RESOLUCIÓN. Muchos equipos entregan 640×480, donde un EAN-13
+ *    está al límite de lo decodificable.
+ *  · SE QUEDABA CALLADO AL FALLAR. Ahora mide la luz del cuadro y dice qué
+ *    hacer: encender la linterna, acercar, inclinar — y al final ofrece
+ *    escribir el código a mano, que es la salida que un cajero con un cliente
+ *    enfrente necesita de verdad.
  *
- * Y LA LINTERNA. Un mostrador está casi siempre a contraluz o en penumbra, y
- * un código impreso en plástico brillante no tiene contraste sin luz propia.
- * El botón enciende el flash del equipo cuando el navegador lo permite
- * (`torch`, hoy Chrome sobre Android). Se pide DESPUÉS de abrir la cámara, a
- * propósito: pedirlo dentro de `getUserMedia` hace fallar la apertura entera
- * en varios equipos y deja al cajero sin cámara.
- *
- * El vídeo se muestra con `object-contain` y no `object-cover`: así lo que se
- * ve es exactamente el cuadro que se analiza, y el recuadro guía no miente.
+ * En `continuo` no se cierra al leer: suma producto tras producto, con
+ * antirrebote por código para que apoyar algo frente al lente no lo agregue
+ * treinta veces.
  */
 
 interface BarcodeDetectorLike {
@@ -53,7 +53,6 @@ interface BarcodeDetectorLike {
 }
 interface BarcodeDetectorCtor {
   new (options?: { formats?: string[] }): BarcodeDetectorLike;
-  getSupportedFormats?(): Promise<string[]>;
 }
 
 /** Solo los formatos que una tienda ve. Limitar la lista acelera los dos motores. */
@@ -67,13 +66,16 @@ type VideoConCallback = HTMLVideoElement & {
 export function CameraScanner({
   onDetected,
   onClose,
+  continuo = false,
 }: {
   onDetected: (code: string) => void;
   onClose: () => void;
+  /** Seguir escaneando tras cada lectura, en vez de cerrarse. */
+  continuo?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
-  const doneRef = useRef(false);
+  const listoRef = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
   const [motor, setMotor] = useState<'nativo' | 'zxing' | null>(null);
@@ -85,15 +87,22 @@ export function CameraScanner({
   const [linterna, setLinterna] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [camaras, setCamaras] = useState<Camara[]>([]);
-  // `deviceId` elegido. Cambiarlo reabre la cámara: es la dependencia del
-  // efecto, así que el bucle entero se rearma solo.
   const [camaraId, setCamaraId] = useState<string | null>(() => camaraRecordada());
+  const [leidos, setLeidos] = useState(0);
+  const [ultimo, setUltimo] = useState<string | null>(null);
+  const [ayuda, setAyuda] = useState<string | null>(null);
+  const [aMano, setAMano] = useState(false);
+  const [manual, setManual] = useState('');
 
   const alternarLinterna = useCallback(async () => {
     const siguiente = !linterna;
     const ok = await cambiarLinterna(trackRef.current, siguiente);
-    if (ok) setLinterna(siguiente);
-    else setCaps((c) => ({ ...c, linterna: false }));
+    if (ok) {
+      setLinterna(siguiente);
+      recordarLinterna(siguiente);
+    } else {
+      setCaps((c) => ({ ...c, linterna: false }));
+    }
   }, [linterna]);
 
   const elegirCamara = useCallback((id: string) => {
@@ -106,6 +115,16 @@ export function CameraScanner({
     await cambiarZoom(trackRef.current, valor);
   }, []);
 
+  function enviarAMano(e: FormEvent) {
+    e.preventDefault();
+    const codigo = manual.trim();
+    if (!codigo) return;
+    setManual('');
+    confirmarEscaneo();
+    onDetected(codigo);
+    if (!continuo) onClose();
+  }
+
   useEffect(() => {
     let stream: MediaStream | null = null;
     let cancelado = false;
@@ -113,28 +132,40 @@ export function CameraScanner({
     let vfcId: number | null = null;
     let wakeLock: WakeLockSentinel | null = null;
 
+    const antirrebote = crearAntirrebote(1800);
+    let desdeUltimaLectura = Date.now();
+    let pocaLuz = false;
+
     function emitir(codigo: string) {
-      if (doneRef.current || !codigo) return;
-      doneRef.current = true;
+      const limpio = codigo.trim();
+      if (!limpio) return;
+      if (!continuo && listoRef.current) return;
+      if (!antirrebote.aceptar(limpio)) return;
+
+      desdeUltimaLectura = Date.now();
       confirmarEscaneo(); // pitido + vibración: el cajero no mira la pantalla
-      onDetected(codigo.trim());
+      setLeidos((n) => n + 1);
+      setUltimo(limpio);
+      setAyuda(null);
+      onDetected(limpio);
+
+      if (!continuo) {
+        listoRef.current = true;
+      }
     }
 
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         setError('Este dispositivo no permite usar la cámara desde el navegador.');
+        setAMano(true);
         return;
       }
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            // Si el cajero ya eligió una cámara en este equipo, se respeta;
-            // si no, se pide la trasera y que el sistema decida cuál.
             ...(camaraId ? { deviceId: { exact: camaraId } } : {}),
             facingMode: { ideal: 'environment' },
-            // Más píxeles sobre el código. `ideal` y no `exact`: si la cámara
-            // no llega, entrega lo que pueda en vez de fallar.
             width: { ideal: 1920 },
             height: { ideal: 1080 },
             frameRate: { ideal: 30 },
@@ -144,11 +175,13 @@ export function CameraScanner({
         const name = (e as DOMException)?.name;
         setError(
           name === 'NotAllowedError'
-            ? 'Permiso de cámara denegado. Habilítelo en el navegador o use el lector de códigos.'
+            ? 'Permiso de cámara denegado. Habilítelo en el navegador o escriba el código.'
             : name === 'NotFoundError'
               ? 'No se encontró ninguna cámara en este dispositivo.'
               : 'No se pudo abrir la cámara.',
         );
+        // Sin cámara, lo único que salva al cajero es poder teclearlo.
+        setAMano(true);
         return;
       }
 
@@ -164,45 +197,42 @@ export function CameraScanner({
       const track = stream.getVideoTracks()[0] ?? null;
       trackRef.current = track;
 
-      // Capacidades y enfoque: después de abrir, nunca antes.
       const capacidades = leerCapacidades(track);
-      if (!cancelado) {
-        setCaps(capacidades);
-        // Flujo nuevo = linterna apagada; el botón no puede mentir.
-        setLinterna(false);
-      }
-
-      // Las etiquetas solo existen una vez concedido el permiso.
-      void listarCamaras().then((lista) => {
-        if (!cancelado) setCamaras(lista);
-      });
+      if (!cancelado) setCaps(capacidades);
       if (capacidades.enfoqueContinuo) await pedirEnfoqueContinuo(track);
       if (capacidades.zoom) setZoom(capacidades.zoom.min);
 
-      // Que la pantalla no se apague a media fila.
+      // La linterna se recuerda: una tienda oscura lo es todos los días.
+      if (capacidades.linterna && linternaRecordada()) {
+        if (await cambiarLinterna(track, true)) setLinterna(true);
+      } else {
+        setLinterna(false);
+      }
+
+      void listarCamaras().then((lista) => {
+        if (!cancelado) setCamaras(lista);
+      });
+
       try {
         wakeLock = (await navigator.wakeLock?.request('screen')) ?? null;
       } catch {
-        /* no todos los navegadores lo permiten; es un lujo, no un requisito */
+        /* es un lujo, no un requisito */
       }
 
-      // ── Lienzo de trabajo: aquí se recorta la franja a analizar ──
       const lienzo = document.createElement('canvas');
       const ctx = lienzo.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         setError('No se pudo preparar el lector de imágenes.');
+        setAMano(true);
         return;
       }
 
       let cuadro = 0;
+
       /**
-       * Dibuja en el lienzo lo que toca analizar y lo devuelve.
-       *
-       * `reducir` solo lo usa ZXing: es JavaScript puro y el costo crece con
-       * cada píxel, mientras que el detector nativo está compilado y traga
-       * 1080p sin problema. Como Safari nunca implementó `BarcodeDetector`,
-       * TODOS los iPhone caen en ZXing — y son justo los que pagaban el
-       * recorte a tamaño completo.
+       * Dibuja lo que toca analizar. `reducir` solo lo usa ZXing: es
+       * JavaScript puro y paga cada píxel, y como Safari nunca implementó
+       * `BarcodeDetector`, todos los iPhone caen ahí.
        */
       function prepararLienzo(reducir: boolean): HTMLCanvasElement | null {
         const w = video.videoWidth;
@@ -217,7 +247,28 @@ export function CameraScanner({
         return lienzo;
       }
 
-      /** Pide el siguiente cuadro por la vía más barata disponible. */
+      /** Mide la luz cada tantos cuadros: no hace falta en cada uno. */
+      function medirLuz() {
+        if (cuadro % 15 !== 0 || lienzo.width === 0) return;
+        try {
+          const datos = ctx!.getImageData(0, 0, lienzo.width, lienzo.height).data;
+          pocaLuz = hayPocaLuz(luminanciaMedia(datos));
+        } catch {
+          /* algunos navegadores restringen getImageData; se sigue sin medir */
+        }
+      }
+
+      function actualizarAyuda() {
+        setAyuda(
+          mensajeDeAyuda({
+            msSinLeer: Date.now() - desdeUltimaLectura,
+            pocaLuz,
+            linterna,
+            hayLinterna: capacidades.linterna,
+          }),
+        );
+      }
+
       function siguienteCuadro(fn: () => void) {
         if (video.requestVideoFrameCallback) {
           vfcId = video.requestVideoFrameCallback(fn);
@@ -233,24 +284,25 @@ export function CameraScanner({
         setMotor('nativo');
         const detector = new Detector({ formats: FORMATOS });
         const paso = async () => {
-          if (cancelado || doneRef.current) return;
+          if (cancelado || (!continuo && listoRef.current)) return;
           try {
             const fuente = prepararLienzo(false);
             if (fuente) {
+              medirLuz();
               const r = await detector.detect(fuente);
-              if (r[0]?.rawValue) return emitir(r[0].rawValue);
+              if (r[0]?.rawValue) emitir(r[0].rawValue);
             }
           } catch {
-            /* un cuadro ilegible no es un error: se sigue intentando */
+            /* un cuadro ilegible no es un error */
           }
           cuadro += 1;
-          siguienteCuadro(() => void paso());
+          if (cuadro % 15 === 0) actualizarAyuda();
+          if (!cancelado && (continuo || !listoRef.current)) siguienteCuadro(() => void paso());
         };
         void paso();
         return;
       }
 
-      // ── Respaldo: ZXing, cargado bajo demanda ──
       setMotor('zxing');
       try {
         const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
@@ -259,8 +311,6 @@ export function CameraScanner({
         ]);
         if (cancelado) return;
 
-        // Mismas restricciones de formato que el motor nativo: ZXing probando
-        // los veintitantos simbologías que conoce es varias veces más lento.
         const formatos = [
           BarcodeFormat.EAN_13,
           BarcodeFormat.EAN_8,
@@ -270,55 +320,79 @@ export function CameraScanner({
           BarcodeFormat.CODE_39,
           BarcodeFormat.ITF,
         ];
-
         const rapido = new Map();
         rapido.set(DecodeHintType.POSSIBLE_FORMATS, formatos);
 
         /**
-         * Lector INSISTENTE para cuando el rápido no da.
-         *
-         * `TRY_HARDER` hace que ZXing pruebe más filas y más escalas del
+         * Lector INSISTENTE: `TRY_HARDER` prueba más filas y más escalas del
          * mismo cuadro. Cuesta varias veces más, así que no se usa de
-         * entrada: se enciende tras unos segundos sin leer, que es
-         * exactamente cuando al cajero ya le vale más una lectura lenta que
-         * ninguna. (`ALSO_INVERTED`, para etiquetas blancas sobre fondo
-         * oscuro, no existe en la versión instalada de la librería.)
+         * entrada; se enciende tras unos segundos sin leer, que es cuando al
+         * cajero ya le vale más una lectura lenta que ninguna.
          */
         const insistente = new Map(rapido);
         insistente.set(DecodeHintType.TRY_HARDER, true);
 
         const lectorRapido = new BrowserMultiFormatReader(rapido);
         const lectorInsistente = new BrowserMultiFormatReader(insistente);
-        const comenzo = Date.now();
         const MS_ANTES_DE_INSISTIR = 2500;
 
-        // Bucle propio en vez de `decodeFromVideoElement`: así ZXing también
-        // aprovecha el recorte y el cuadro-a-cuadro.
+        /**
+         * Invierte el lienzo. Algunas básculas y etiquetadoras imprimen el
+         * código en blanco sobre fondo oscuro, y ZXing solo busca barras
+         * oscuras sobre claro. Esta versión de la librería no trae la opción
+         * `ALSO_INVERTED`, así que se invierte a mano — cuesta una pasada
+         * sobre un lienzo ya reducido, y solo se hace cuando lo normal falló.
+         */
+        function invertir() {
+          const img = ctx!.getImageData(0, 0, lienzo.width, lienzo.height);
+          const d = img.data;
+          for (let i = 0; i < d.length; i += 4) {
+            d[i] = 255 - d[i]!;
+            d[i + 1] = 255 - d[i + 1]!;
+            d[i + 2] = 255 - d[i + 2]!;
+          }
+          ctx!.putImageData(img, 0, 0);
+        }
+
         const paso = () => {
-          if (cancelado || doneRef.current) return;
+          if (cancelado || (!continuo && listoRef.current)) return;
+          const duro = Date.now() - desdeUltimaLectura > MS_ANTES_DE_INSISTIR;
+          const lector = duro ? lectorInsistente : lectorRapido;
           try {
             const fuente = prepararLienzo(true);
             if (fuente) {
-              const duro = Date.now() - comenzo > MS_ANTES_DE_INSISTIR;
-              const r = (duro ? lectorInsistente : lectorRapido).decodeFromCanvas(fuente);
-              if (r) return emitir(r.getText());
+              medirLuz();
+              try {
+                const r = lector.decodeFromCanvas(fuente);
+                if (r) emitir(r.getText());
+              } catch {
+                // Insistiendo y en cuadros alternos, probar en negativo.
+                if (duro && cuadro % 2 === 0) {
+                  invertir();
+                  const r2 = lector.decodeFromCanvas(fuente);
+                  if (r2) emitir(r2.getText());
+                }
+              }
             }
           } catch {
             /* NotFoundException en cada cuadro sin código: es lo normal */
           }
           cuadro += 1;
-          siguienteCuadro(paso);
+          if (cuadro % 15 === 0) actualizarAyuda();
+          if (!cancelado && (continuo || !listoRef.current)) siguienteCuadro(paso);
         };
         paso();
       } catch {
         setError('No se pudo iniciar el lector de códigos en este navegador.');
+        setAMano(true);
       }
     })();
 
     return () => {
       cancelado = true;
       if (rafId !== null) cancelAnimationFrame(rafId);
-      if (vfcId !== null) (videoRef.current as VideoConCallback | null)?.cancelVideoFrameCallback?.(vfcId);
+      if (vfcId !== null)
+        (videoRef.current as VideoConCallback | null)?.cancelVideoFrameCallback?.(vfcId);
       void wakeLock?.release().catch(() => undefined);
       // Apagar la linterna antes de soltar la pista: en algunos equipos el
       // flash se queda encendido si solo se detiene el flujo.
@@ -327,35 +401,54 @@ export function CameraScanner({
         trackRef.current = null;
       });
     };
-  }, [onDetected, camaraId]);
+    // `linterna` queda fuera a propósito: cambiarla no debe reabrir la cámara.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onDetected, camaraId, continuo]);
 
   return (
     <div className="fixed inset-0 z-30 flex flex-col bg-[hsl(var(--bg-deep)/0.95)] p-4">
       <div className="flex items-center justify-between text-white">
-        <span className="font-semibold">Escanear con la cámara</span>
+        <span className="font-semibold">
+          {continuo ? 'Escanear productos' : 'Escanear con la cámara'}
+          {leidos > 0 && (
+            <span className="ml-2 rounded-full bg-[hsl(var(--ok)/0.25)] px-2 py-0.5 text-xs">
+              {leidos} agregado(s)
+            </span>
+          )}
+        </span>
         <button
           onClick={onClose}
           className="rounded-lg bg-[hsl(var(--text-1)/0.12)] px-3 py-1.5 text-sm hover:bg-[hsl(var(--text-1)/0.2)]"
         >
-          Cerrar
+          {continuo && leidos > 0 ? 'Listo' : 'Cerrar'}
         </button>
       </div>
 
       <div className="relative mx-auto mt-4 w-full max-w-md flex-1 overflow-hidden rounded-xl bg-black">
+        {/* Tocar el visor vuelve a enfocar: el enfoque continuo se queda
+            pegado cuando el fondo tiene más contraste que el código. */}
         <video
           ref={videoRef}
           playsInline
           muted
-          className="h-full w-full object-contain"
-          aria-label="Vista de la cámara para escanear códigos"
+          onClick={() => void reenfocar(trackRef.current)}
+          className="h-full w-full cursor-pointer object-contain"
+          aria-label="Vista de la cámara para escanear códigos. Tóquela para enfocar."
         />
-        {/* La guía cubre la misma franja que se analiza (90 % × 38 %). */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-[38%] w-[90%] rounded-lg border-2 border-[hsl(var(--ok)/0.9)] shadow-[0_0_0_9999px_rgba(0,0,0,0.38)]" />
+          <div
+            className={`h-[38%] w-[90%] rounded-lg border-2 transition-colors ${
+              ultimo ? 'border-[hsl(var(--ok))]' : 'border-[hsl(var(--ok)/0.85)]'
+            } shadow-[0_0_0_9999px_rgba(0,0,0,0.38)]`}
+          />
         </div>
+        {ultimo && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-[hsl(var(--ok)/0.9)] px-3 py-1.5 text-center text-sm font-semibold text-[hsl(var(--bg-deep))]">
+            {ultimo}
+          </div>
+        )}
       </div>
 
-      {/* ── Controles del equipo ── */}
       <div className="mx-auto mt-3 flex w-full max-w-md flex-col gap-3">
         {caps.linterna && (
           <button
@@ -406,6 +499,34 @@ export function CameraScanner({
             />
           </label>
         )}
+
+        {/* La salida de emergencia: hay un cliente esperando. */}
+        {aMano ? (
+          <form onSubmit={enviarAMano} className="flex gap-2">
+            <input
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+              placeholder="Escriba el código"
+              inputMode="numeric"
+              autoFocus
+              aria-label="Código escrito a mano"
+              className="money flex-1 rounded-xl bg-[hsl(var(--text-1)/0.12)] px-3 py-2.5 text-white placeholder:text-white/40"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-[hsl(var(--accent))] px-4 py-2.5 text-sm font-semibold text-[hsl(var(--accent-ink))]"
+            >
+              Buscar
+            </button>
+          </form>
+        ) : (
+          <button
+            onClick={() => setAMano(true)}
+            className="text-xs text-white/60 underline-offset-2 hover:underline"
+          >
+            Escribir el código a mano
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -413,10 +534,14 @@ export function CameraScanner({
           {error}
         </p>
       ) : (
-        <p className="mt-3 text-center text-sm text-white/70">
-          Centre el código en el recuadro
-          {caps.linterna && ' · si hay poca luz, encienda la linterna'}
-          {motor === 'zxing' && ' · lector compatible'}
+        <p className="mt-3 min-h-[1.25rem] text-center text-sm text-white/70">
+          {ayuda ?? (
+            <>
+              Centre el código en el recuadro
+              {continuo && ' · puede pasar varios seguidos'}
+              {motor === 'zxing' && ' · lector compatible'}
+            </>
+          )}
         </p>
       )}
     </div>

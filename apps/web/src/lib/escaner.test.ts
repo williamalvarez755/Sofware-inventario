@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   CADA_CUANTOS_CUADRO_COMPLETO,
   cambiarLinterna,
+  crearAntirrebote,
   escalaParaDecodificar,
+  hayPocaLuz,
   leerCapacidades,
+  luminanciaMedia,
+  mensajeDeAyuda,
   regionDeInteres,
   tocaCuadroCompleto,
 } from './escaner';
@@ -141,5 +145,101 @@ describe('escala de decodificación para ZXing', () => {
     const anchoFinal = 1728 * escalaParaDecodificar(1728);
     const pixelesPorModulo = (anchoFinal / 3) / 95;
     expect(pixelesPorModulo).toBeGreaterThan(3);
+  });
+});
+
+describe('medición de luz', () => {
+  /** Cuadro uniforme del color dado, en formato RGBA. */
+  function cuadro(r: number, g: number, b: number, pixeles = 2048): Uint8ClampedArray {
+    const d = new Uint8ClampedArray(pixeles * 4);
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = r;
+      d[i + 1] = g;
+      d[i + 2] = b;
+      d[i + 3] = 255;
+    }
+    return d;
+  }
+
+  it('reconoce un cuadro oscuro y uno iluminado', () => {
+    expect(luminanciaMedia(cuadro(0, 0, 0))).toBeCloseTo(0, 2);
+    expect(luminanciaMedia(cuadro(255, 255, 255))).toBeCloseTo(1, 2);
+    expect(luminanciaMedia(cuadro(128, 128, 128))).toBeCloseTo(0.5, 1);
+  });
+
+  it('pesa los canales como los pesa el ojo', () => {
+    // El verde aporta mucho más que el azul al contraste percibido, que es
+    // lo que decide si unas barras se distinguen del fondo.
+    expect(luminanciaMedia(cuadro(0, 255, 0))).toBeGreaterThan(
+      luminanciaMedia(cuadro(0, 0, 255)),
+    );
+  });
+
+  it('decide cuándo el problema es la luz y no el lector', () => {
+    expect(hayPocaLuz(luminanciaMedia(cuadro(30, 30, 30)))).toBe(true);
+    expect(hayPocaLuz(luminanciaMedia(cuadro(180, 180, 180)))).toBe(false);
+  });
+
+  it('un cuadro vacío no se reporta como oscuro', () => {
+    // Antes del primer fotograma no hay datos; avisar de poca luz ahí sería
+    // un falso positivo en cada apertura de la cámara.
+    expect(hayPocaLuz(luminanciaMedia(new Uint8ClampedArray(0)))).toBe(false);
+  });
+});
+
+describe('antirrebote del modo continuo', () => {
+  it('no agrega treinta veces el producto que está frente al lente', () => {
+    const a = crearAntirrebote(1800);
+    expect(a.aceptar('7401', 0)).toBe(true);
+    expect(a.aceptar('7401', 100)).toBe(false);
+    expect(a.aceptar('7401', 1700)).toBe(false);
+    expect(a.aceptar('7401', 1900)).toBe(true);
+  });
+
+  it('un código distinto entra de inmediato', () => {
+    // El cajero pasa productos seguidos: bloquear por tiempo global en vez
+    // de por código lo obligaría a esperar entre uno y otro.
+    const a = crearAntirrebote(1800);
+    expect(a.aceptar('7401', 0)).toBe(true);
+    expect(a.aceptar('7402', 50)).toBe(true);
+    expect(a.aceptar('7403', 80)).toBe(true);
+  });
+
+  it('se puede olvidar un código a propósito', () => {
+    const a = crearAntirrebote(1800);
+    a.aceptar('7401', 0);
+    a.olvidar('7401');
+    expect(a.aceptar('7401', 100)).toBe(true);
+  });
+});
+
+describe('mensajes de ayuda', () => {
+  const base = { msSinLeer: 0, pocaLuz: false, linterna: false, hayLinterna: true };
+
+  it('se calla los primeros dos segundos', () => {
+    // Antes de eso un escaneo normal ya habría entrado: el mensaje seria ruido.
+    expect(mensajeDeAyuda({ ...base, msSinLeer: 500 })).toBeNull();
+    expect(mensajeDeAyuda({ ...base, msSinLeer: 1999 })).toBeNull();
+  });
+
+  it('la luz va primero, porque es lo que más veces resuelve', () => {
+    expect(mensajeDeAyuda({ ...base, msSinLeer: 3000, pocaLuz: true })).toMatch(/linterna/);
+  });
+
+  it('si no hay linterna en el equipo, sugiere otra cosa', () => {
+    // En iPhone no existe torch por navegador: ofrecerla seria mentir.
+    const m = mensajeDeAyuda({ ...base, msSinLeer: 3000, pocaLuz: true, hayLinterna: false });
+    expect(m).toMatch(/lámpara/);
+  });
+
+  it('no repite el consejo de la linterna si ya está encendida', () => {
+    const m = mensajeDeAyuda({ ...base, msSinLeer: 3000, pocaLuz: true, linterna: true });
+    expect(m).not.toMatch(/encienda la linterna/i);
+  });
+
+  it('va escalando y termina ofreciendo escribirlo a mano', () => {
+    expect(mensajeDeAyuda({ ...base, msSinLeer: 3000 })).toMatch(/Acerque/);
+    expect(mensajeDeAyuda({ ...base, msSinLeer: 6000 })).toMatch(/reflejo/);
+    expect(mensajeDeAyuda({ ...base, msSinLeer: 12000 })).toMatch(/a mano/);
   });
 });
