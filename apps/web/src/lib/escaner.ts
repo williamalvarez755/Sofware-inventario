@@ -292,6 +292,129 @@ export function recordarCamara(deviceId: string): void {
   }
 }
 
+export function olvidarCamara(): void {
+  try {
+    localStorage.removeItem(CLAVE_CAMARA);
+  } catch {
+    /* nada que olvidar */
+  }
+}
+
+/**
+ * Qué tan buena es una cámara para leer un código a 15 cm, a partir de su
+ * nombre. Más alto es mejor; por debajo de cero no sirve.
+ *
+ * POR QUÉ POR EL NOMBRE Y NO POR SUS CAPACIDADES. Porque el navegador no
+ * expone la distancia mínima de enfoque de ninguna manera. Lo único que hay
+ * es la etiqueta, y resulta que las etiquetas son bastante honestas: el
+ * fabricante escribe "Ultra Wide", "Macro" o "Telephoto" porque es lo que la
+ * cámara es.
+ *
+ * LO QUE SE PENALIZA Y POR QUÉ:
+ *  · ULTRA GRAN ANGULAR — enfoca desde ~10 cm pero deforma y reparte los
+ *    mismos píxeles en un campo tres veces más ancho: el código queda con un
+ *    tercio de resolución. Es la que el sistema elige mal más seguido.
+ *  · TELEOBJETIVO — no enfoca de cerca, punto. A 15 cm devuelve una mancha.
+ *  · PROFUNDIDAD / INFRARROJA / MONOCROMO — no son cámaras de foto; algunas
+ *    entregan 240×180.
+ *  · MACRO — sí enfoca de cerca, pero en los equipos que la traen suele ser
+ *    de 2 MP y de foco fijo. Se penaliza poco: es mejor que la ultra ancha.
+ *
+ * "Wide" a secas NO se penaliza: en un iPhone, "Back Dual Wide Camera" es la
+ * cámara principal, no la ultra ancha. Penalizar esa palabra habría elegido
+ * mal justo en el equipo que el dueño está probando.
+ */
+export function puntuarCamara(etiqueta: string): number {
+  const t = etiqueta.toLowerCase();
+
+  // La frontal nunca: aunque fuera la única, apuntarla a un producto obliga a
+  // leer el código al revés y a ciegas.
+  if (/front|frontal|selfie|user facing|facing front|delantera/.test(t)) return -1000;
+
+  let p = 0;
+  if (/back|rear|trasera|posterior|environment|facing back|world/.test(t)) p += 100;
+
+  if (/ultra|ultrawide|ultra wide|gran angular|granangular/.test(t)) p -= 50;
+  if (/tele|teleobjetivo|telephoto|zoom/.test(t)) p -= 40;
+  if (/depth|profundidad|tof|time of flight/.test(t)) p -= 40;
+  if (/infra|\bir\b|monochrom|monocrom/.test(t)) p -= 35;
+  if (/macro/.test(t)) p -= 15;
+
+  // A igualdad de todo, la etiqueta más simple es la cámara principal:
+  // "Back Camera" gana a "Back Dual Wide Camera".
+  p -= Math.min(10, t.split(/[\s,]+/).filter(Boolean).length);
+  return p;
+}
+
+/** La mejor cámara de la lista, o `null` si ninguna sirve o no hay nombres. */
+export function mejorCamaraTrasera(camaras: Camara[]): Camara | null {
+  let mejor: Camara | null = null;
+  let mejorP = -Infinity;
+  for (const c of camaras) {
+    // Sin etiqueta no hay nada que juzgar (el navegador las oculta antes de
+    // conceder el permiso), y "Cámara 2" es un relleno nuestro, no un nombre.
+    if (!c.etiqueta || /^cámara \d+$/i.test(c.etiqueta)) continue;
+    const p = puntuarCamara(c.etiqueta);
+    if (p > mejorP) {
+      mejorP = p;
+      mejor = c;
+    }
+  }
+  return mejorP > 0 ? mejor : null;
+}
+
+/** Diferencia de puntaje a partir de la cual vale la pena reabrir la cámara. */
+export const VENTAJA_PARA_CAMBIAR = 20;
+
+/**
+ * Si el sistema nos dio una cámara claramente peor que otra disponible,
+ * devuelve la buena. Si la que tenemos ya está bien, devuelve `null`.
+ *
+ * Reabrir la cámara se ve: hay un parpadeo. Así que solo se hace cuando el
+ * cambio importa de verdad —de la ultra ancha a la principal— y no para
+ * ganar un punto de desempate.
+ */
+export function convieneCambiar(etiquetaActual: string | null, camaras: Camara[]): Camara | null {
+  const mejor = mejorCamaraTrasera(camaras);
+  if (!mejor) return null;
+  if (!etiquetaActual) return mejor;
+  if (mejor.etiqueta === etiquetaActual) return null;
+  return puntuarCamara(mejor.etiqueta) - puntuarCamara(etiquetaActual) >= VENTAJA_PARA_CAMBIAR
+    ? mejor
+    : null;
+}
+
+// ───────────────────────── Por qué no hay cámara ────────────────────────────
+
+/**
+ * Explica en una frase por qué no se puede abrir la cámara.
+ *
+ * LA CAUSA QUE MÁS CONFUNDE, Y LA MENOS OBVIA: el navegador solo entrega la
+ * cámara en un contexto seguro. Probar el sistema desde el teléfono entrando
+ * a `http://192.168.1.x:5173` —que es exactamente lo que uno hace para probar
+ * en la red de la tienda— deja `getUserMedia` sin existir, y el mensaje
+ * genérico "no se pudo abrir la cámara" manda a buscar el problema en el
+ * permiso, en el teléfono o en el código. Decirlo ahorra la tarde.
+ */
+export function diagnosticoSinCamara(entorno: {
+  contextoSeguro: boolean;
+  hayApi: boolean;
+  origen?: string;
+}): string {
+  if (!entorno.contextoSeguro) {
+    const donde = entorno.origen ? ` Está entrando por ${entorno.origen}.` : '';
+    return (
+      'El navegador solo permite usar la cámara en sitios seguros (https).' +
+      donde +
+      ' Entre por https o escriba el código a mano.'
+    );
+  }
+  if (!entorno.hayApi) {
+    return 'Este navegador no permite usar la cámara. Escriba el código a mano.';
+  }
+  return 'No se pudo abrir la cámara.';
+}
+
 // ───────────────────── Decodificación en JavaScript (iPhone) ────────────────
 
 /**

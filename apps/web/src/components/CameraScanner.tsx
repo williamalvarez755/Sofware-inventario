@@ -4,6 +4,8 @@ import {
   type Capacidades,
   camaraRecordada,
   cambiarLinterna,
+  convieneCambiar,
+  diagnosticoSinCamara,
   cambiarZoom,
   confirmarEscaneo,
   crearAntirrebote,
@@ -14,6 +16,7 @@ import {
   listarCamaras,
   luminanciaMedia,
   mensajeDeAyuda,
+  olvidarCamara,
   pedirEnfoqueContinuo,
   recordarCamara,
   recordarLinterna,
@@ -21,6 +24,7 @@ import {
   regionDeInteres,
   tocaCuadroCompleto,
 } from '../lib/escaner';
+import { ANCHO_MAXIMO_WASM, type LectorWasm, cargarLectorWasm } from '../lib/zxingWasm';
 import { Icon } from './Icon';
 
 /**
@@ -53,6 +57,7 @@ interface BarcodeDetectorLike {
 }
 interface BarcodeDetectorCtor {
   new (options?: { formats?: string[] }): BarcodeDetectorLike;
+  getSupportedFormats?(): Promise<string[]>;
 }
 
 /** Solo los formatos que una tienda ve. Limitar la lista acelera los dos motores. */
@@ -78,7 +83,7 @@ export function CameraScanner({
   const listoRef = useRef(false);
 
   const [error, setError] = useState<string | null>(null);
-  const [motor, setMotor] = useState<'nativo' | 'zxing' | null>(null);
+  const [motor, setMotor] = useState<'nativo' | 'zxing' | 'wasm' | null>(null);
   const [caps, setCaps] = useState<Capacidades>({
     linterna: false,
     zoom: null,
@@ -156,29 +161,71 @@ export function CameraScanner({
 
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError('Este dispositivo no permite usar la cámara desde el navegador.');
+        setError(
+          diagnosticoSinCamara({
+            contextoSeguro: window.isSecureContext !== false,
+            hayApi: false,
+            origen: window.location.origin,
+          }),
+        );
         setAMano(true);
         return;
       }
 
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            ...(camaraId ? { deviceId: { exact: camaraId } } : {}),
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 },
-          },
-        });
-      } catch (e) {
-        const name = (e as DOMException)?.name;
+      // Resolución alta a propósito: más píxeles son más módulos por barra, y
+      // eso es lo que decide si un código pequeño o algo lejano se lee. Media
+      // tienda tiene equipos que entregan 640×480 si uno no pide nada.
+      const IDEALES = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      };
+
+      /**
+       * Tres intentos, cada uno menos exigente que el anterior.
+       *
+       * EL PRIMERO FALLA POR UNA RAZÓN TONTA Y CARÍSIMA: el identificador de
+       * cámara recordado puede ser de otro teléfono, de otro navegador o de
+       * una cámara que ya no está, y `exact` hace que el navegador rechace
+       * TODO con OverconstrainedError. Eso dejaba el escáner muerto para
+       * siempre en ese equipo, porque el identificador malo seguía guardado y
+       * el siguiente intento volvía a pedirlo. Ahora se olvida y se reintenta.
+       *
+       * El último intento es `video: true` a secas: si un equipo raro no
+       * tolera ni los valores ideales, más vale una cámara mala que ninguna.
+       */
+      const intentos: MediaStreamConstraints[] = [
+        ...(camaraId ? [{ video: { deviceId: { exact: camaraId }, ...IDEALES } }] : []),
+        { video: { facingMode: { ideal: 'environment' }, ...IDEALES } },
+        { video: true },
+      ];
+
+      let ultimoFallo: DOMException | null = null;
+      for (const [i, restriccion] of intentos.entries()) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(restriccion);
+          break;
+        } catch (e) {
+          ultimoFallo = e as DOMException;
+          // El permiso denegado no se arregla pidiendo menos: no insistir.
+          if (ultimoFallo?.name === 'NotAllowedError') break;
+          // Si lo que falló fue la cámara recordada, se descarta de una vez.
+          if (i === 0 && camaraId) olvidarCamara();
+        }
+      }
+
+      if (!stream) {
+        const name = ultimoFallo?.name;
         setError(
           name === 'NotAllowedError'
             ? 'Permiso de cámara denegado. Habilítelo en el navegador o escriba el código.'
             : name === 'NotFoundError'
               ? 'No se encontró ninguna cámara en este dispositivo.'
-              : 'No se pudo abrir la cámara.',
+              : diagnosticoSinCamara({
+                  contextoSeguro: window.isSecureContext !== false,
+                  hayApi: true,
+                  origen: window.location.origin,
+                }),
         );
         // Sin cámara, lo único que salva al cajero es poder teclearlo.
         setAMano(true);
@@ -191,6 +238,14 @@ export function CameraScanner({
       }
 
       const video = videoRef.current as VideoConCallback;
+      // iOS solo reproduce en línea si el vídeo está silenciado Y marcado como
+      // `playsinline` EN EL MOMENTO del play. React pone las propiedades, pero
+      // no siempre deja el atributo en el DOM, y sin el atributo Safari abre el
+      // reproductor a pantalla completa o deja el cuadro en negro. Ponerlos a
+      // mano cuesta dos líneas y es la diferencia entre ver la cámara o no.
+      video.muted = true;
+      video.setAttribute('muted', '');
+      video.setAttribute('playsinline', '');
       video.srcObject = stream;
       await video.play().catch(() => undefined);
 
@@ -210,7 +265,22 @@ export function CameraScanner({
       }
 
       void listarCamaras().then((lista) => {
-        if (!cancelado) setCamaras(lista);
+        if (cancelado) return;
+        setCamaras(lista);
+
+        // SI EL SISTEMA NOS DIO LA CÁMARA EQUIVOCADA, CAMBIARLA SIN PREGUNTAR.
+        // `facingMode: environment` deja que el sistema elija entre las tres o
+        // cuatro traseras de un teléfono moderno, y muchas veces elige la ultra
+        // gran angular, que reparte los píxeles en un campo tres veces más
+        // ancho y deforma el código. Esa es la causa de "en este teléfono no
+        // escanea". Solo se reabre cuando el cambio vale el parpadeo, y nunca
+        // si el cajero ya eligió una a mano.
+        if (camaraId) return;
+        const mejor = convieneCambiar(track?.label ?? null, lista);
+        if (mejor) {
+          recordarCamara(mejor.id);
+          setCamaraId(mejor.id); // reabre el efecto con la cámara buena
+        }
       });
 
       try {
@@ -234,22 +304,22 @@ export function CameraScanner({
        * JavaScript puro y paga cada píxel, y como Safari nunca implementó
        * `BarcodeDetector`, todos los iPhone caen ahí.
        */
-      function prepararLienzo(reducir: boolean): HTMLCanvasElement | null {
+      function prepararLienzo(reducir: boolean, maximo?: number): HTMLCanvasElement | null {
         const w = video.videoWidth;
         const h = video.videoHeight;
         if (!w || !h) return null;
         const completo = tocaCuadroCompleto(cuadro);
         const r = completo ? { x: 0, y: 0, ancho: w, alto: h } : regionDeInteres(w, h);
-        const escala = reducir ? escalaParaDecodificar(r.ancho) : 1;
+        const escala = reducir ? escalaParaDecodificar(r.ancho, maximo) : 1;
         lienzo.width = Math.max(1, Math.round(r.ancho * escala));
         lienzo.height = Math.max(1, Math.round(r.alto * escala));
         ctx!.drawImage(video, r.x, r.y, r.ancho, r.alto, 0, 0, lienzo.width, lienzo.height);
         return lienzo;
       }
 
-      /** Mide la luz cada tantos cuadros: no hace falta en cada uno. */
+      /** Mide la luz del último lienzo dibujado. Quien llama decide cada cuándo. */
       function medirLuz() {
-        if (cuadro % 15 !== 0 || lienzo.width === 0) return;
+        if (lienzo.width === 0) return;
         try {
           const datos = ctx!.getImageData(0, 0, lienzo.width, lienzo.height).data;
           pocaLuz = hayPocaLuz(luminanciaMedia(datos));
@@ -280,23 +350,58 @@ export function CameraScanner({
       const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor })
         .BarcodeDetector;
 
+      /**
+       * PREGUNTARLE AL DETECTOR NATIVO SI DE VERDAD SIRVE.
+       *
+       * En Android, BarcodeDetector se apoya en el módulo de códigos de
+       * Google Play Services. En los equipos donde ese módulo no está
+       * instalado —teléfonos sin servicios de Google, versiones recortadas
+       * de fábrica, algunas ROMs— el objeto EXISTE, construirlo no falla, y
+       * detect() devuelve una lista vacía para siempre. El escáner se queda
+       * mirando sin leer nunca nada, y no hay ningún error que lo delate: es
+       * el caso textual de "en algunos entornos no da".
+       *
+       * getSupportedFormats() lo desenmascara en una línea: si no declara
+       * ninguno de los formatos de tienda, se usa el WebAssembly, que no
+       * depende de nada del sistema.
+       */
+      let hayNativo = false;
       if (Detector) {
+        try {
+          const soportados = (await Detector.getSupportedFormats?.()) ?? [];
+          hayNativo = FORMATOS.some((f) => soportados.includes(f));
+        } catch {
+          hayNativo = false;
+        }
+      }
+      if (cancelado) return;
+
+      if (Detector && hayNativo) {
         setMotor('nativo');
         const detector = new Detector({ formats: FORMATOS });
         const paso = async () => {
           if (cancelado || (!continuo && listoRef.current)) return;
           try {
-            const fuente = prepararLienzo(false);
-            if (fuente) {
-              medirLuz();
-              const r = await detector.detect(fuente);
+            // AL VÍDEO DIRECTO, SIN PASAR POR UN LIENZO. El detector de Chrome
+            // está compilado y traga el cuadro completo de sobra; el
+            // `drawImage` de 1920×1080 que se hacía antes en CADA cuadro era
+            // trabajo puro de más, y en un Android barato eso se come buena
+            // parte del presupuesto por cuadro. De paso ahora mira siempre el
+            // cuadro ENTERO, así que deja de castigar a quien apunta un poco
+            // fuera de la franja.
+            if (video.videoWidth) {
+              const r = await detector.detect(video);
               if (r[0]?.rawValue) emitir(r[0].rawValue);
             }
           } catch {
             /* un cuadro ilegible no es un error */
           }
           cuadro += 1;
-          if (cuadro % 15 === 0) actualizarAyuda();
+          // El lienzo ya solo existe para medir la luz, una vez cada 15 cuadros.
+          if (cuadro % 15 === 0) {
+            if (prepararLienzo(true)) medirLuz();
+            actualizarAyuda();
+          }
           if (!cancelado && (continuo || !listoRef.current)) siguienteCuadro(() => void paso());
         };
         void paso();
@@ -304,6 +409,23 @@ export function CameraScanner({
       }
 
       setMotor('zxing');
+
+      /**
+       * El WebAssembly se carga EN PARALELO, no antes de empezar.
+       *
+       * Son unos cientos de kilobytes: esperarlo dejaría el visor muerto los
+       * primeros segundos, que es justo cuando el cajero ya está apuntando. Así
+       * que se empieza a decodificar con la versión de JavaScript y, en cuanto
+       * el módulo está listo, el bucle lo usa a él y nada más. El cambio no se
+       * nota salvo en la velocidad.
+       */
+      let wasm: LectorWasm | null = null;
+      void cargarLectorWasm().then((lector) => {
+        if (cancelado || !lector) return;
+        wasm = lector;
+        setMotor('wasm');
+      });
+
       try {
         const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
           import('@zxing/browser'),
@@ -354,23 +476,56 @@ export function CameraScanner({
           ctx!.putImageData(img, 0, 0);
         }
 
-        const paso = () => {
+        const paso = async () => {
           if (cancelado || (!continuo && listoRef.current)) return;
           const duro = Date.now() - desdeUltimaLectura > MS_ANTES_DE_INSISTIR;
-          const lector = duro ? lectorInsistente : lectorRapido;
           try {
-            const fuente = prepararLienzo(true);
-            if (fuente) {
-              medirLuz();
-              try {
-                const r = lector.decodeFromCanvas(fuente);
-                if (r) emitir(r.getText());
-              } catch {
-                // Insistiendo y en cuadros alternos, probar en negativo.
-                if (duro && cuadro % 2 === 0) {
-                  invertir();
-                  const r2 = lector.decodeFromCanvas(fuente);
-                  if (r2) emitir(r2.getText());
+            if (wasm) {
+              // Con WebAssembly se le entrega un recorte MÁS GRANDE (1600 px
+              // en vez de 1024): más píxeles son más módulos por barra, y eso
+              // es lo que decide si un código pequeño o lejano se lee. Antes
+              // había que achicarlo porque cada píxel lo pagaba JavaScript;
+              // medido, un cuadro de 1600×600 le cuesta 1,7 ms.
+              const fuente = prepararLienzo(true, ANCHO_MAXIMO_WASM);
+              if (fuente) {
+                if (cuadro % 15 === 0) medirLuz();
+                const img = ctx!.getImageData(0, 0, fuente.width, fuente.height);
+                const texto = await wasm(img, duro);
+                if (texto) emitir(texto);
+                // EL NEGATIVO SIGUE SIENDO NUESTRO TRABAJO. `tryInvert` de la
+                // librería solo se aplica a los códigos matriciales (QR,
+                // DataMatrix): la norma de los lineales no admite reflectancia
+                // invertida, así que un EAN-13 blanco sobre negro —lo que
+                // imprimen algunas básculas y etiquetadoras— no lo lee. Se
+                // comprobó: en negativo devuelve nada; invirtiendo los píxeles
+                // a mano, lo lee. `tryRotate` sí funciona (un código girado 90°
+                // se lee), así que eso no hay que hacerlo.
+                else if (duro && cuadro % 2 === 0) {
+                  const d = img.data;
+                  for (let i = 0; i < d.length; i += 4) {
+                    d[i] = 255 - d[i]!;
+                    d[i + 1] = 255 - d[i + 1]!;
+                    d[i + 2] = 255 - d[i + 2]!;
+                  }
+                  const negativo = await wasm(img, duro);
+                  if (negativo) emitir(negativo);
+                }
+              }
+            } else {
+              const lector = duro ? lectorInsistente : lectorRapido;
+              const fuente = prepararLienzo(true);
+              if (fuente) {
+                if (cuadro % 15 === 0) medirLuz();
+                try {
+                  const r = lector.decodeFromCanvas(fuente);
+                  if (r) emitir(r.getText());
+                } catch {
+                  // Insistiendo y en cuadros alternos, probar en negativo.
+                  if (duro && cuadro % 2 === 0) {
+                    invertir();
+                    const r2 = lector.decodeFromCanvas(fuente);
+                    if (r2) emitir(r2.getText());
+                  }
                 }
               }
             }
@@ -379,9 +534,9 @@ export function CameraScanner({
           }
           cuadro += 1;
           if (cuadro % 15 === 0) actualizarAyuda();
-          if (!cancelado && (continuo || !listoRef.current)) siguienteCuadro(paso);
+          if (!cancelado && (continuo || !listoRef.current)) siguienteCuadro(() => void paso());
         };
-        paso();
+        void paso();
       } catch {
         setError('No se pudo iniciar el lector de códigos en este navegador.');
         setAMano(true);
@@ -539,7 +694,12 @@ export function CameraScanner({
             <>
               Centre el código en el recuadro
               {continuo && ' · puede pasar varios seguidos'}
+              {/* Qué motor está leyendo. No es un detalle técnico de adorno:
+                  cuando el dueño reporte "en este teléfono no da", esta línea
+                  dice si cayó en el lector lento o no, y eso es media
+                  respuesta sin tener el teléfono en la mano. */}
               {motor === 'zxing' && ' · lector compatible'}
+              {motor === 'wasm' && ' · lector rápido'}
             </>
           )}
         </p>

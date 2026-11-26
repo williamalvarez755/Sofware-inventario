@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   CADA_CUANTOS_CUADRO_COMPLETO,
   cambiarLinterna,
+  convieneCambiar,
   crearAntirrebote,
+  diagnosticoSinCamara,
   escalaParaDecodificar,
   hayPocaLuz,
   leerCapacidades,
   luminanciaMedia,
+  mejorCamaraTrasera,
   mensajeDeAyuda,
+  puntuarCamara,
   regionDeInteres,
   tocaCuadroCompleto,
 } from './escaner';
@@ -241,5 +245,104 @@ describe('mensajes de ayuda', () => {
     expect(mensajeDeAyuda({ ...base, msSinLeer: 3000 })).toMatch(/Acerque/);
     expect(mensajeDeAyuda({ ...base, msSinLeer: 6000 })).toMatch(/reflejo/);
     expect(mensajeDeAyuda({ ...base, msSinLeer: 12000 })).toMatch(/a mano/);
+  });
+});
+
+// ───────────────── Elección automática de cámara (iPhone y Android) ─────────
+
+describe('elegir la cámara correcta por su nombre', () => {
+  it('nunca elige la frontal', () => {
+    expect(puntuarCamara('Front Camera')).toBeLessThan(0);
+    expect(puntuarCamara('camera2 1, facing front')).toBeLessThan(0);
+    expect(mejorCamaraTrasera([{ id: 'a', etiqueta: 'Front Camera' }])).toBeNull();
+  });
+
+  it('en un iPhone elige la principal, no la ultra ancha ni el teleobjetivo', () => {
+    // Etiquetas textuales de iOS. "Back Dual Wide Camera" ES la principal:
+    // por eso "wide" a secas no se penaliza.
+    const iphone = [
+      { id: '1', etiqueta: 'Front Camera' },
+      { id: '2', etiqueta: 'Back Ultra Wide Camera' },
+      { id: '3', etiqueta: 'Back Camera' },
+      { id: '4', etiqueta: 'Back Telephoto Camera' },
+    ];
+    expect(mejorCamaraTrasera(iphone)?.id).toBe('3');
+  });
+
+  it('en un iPhone sin cámara "Back Camera" suelta, elige la dual ancha', () => {
+    const iphone = [
+      { id: '1', etiqueta: 'Back Ultra Wide Camera' },
+      { id: '2', etiqueta: 'Back Dual Wide Camera' },
+    ];
+    expect(mejorCamaraTrasera(iphone)?.id).toBe('2');
+  });
+
+  it('en Android descarta la gran angular, la macro y la de profundidad', () => {
+    const android = [
+      { id: '1', etiqueta: 'camera2 0, facing back' },
+      { id: '2', etiqueta: 'Ultra wide camera, facing back' },
+      { id: '3', etiqueta: 'Macro camera, facing back' },
+      { id: '4', etiqueta: 'Depth camera, facing back' },
+    ];
+    expect(mejorCamaraTrasera(android)?.id).toBe('1');
+  });
+
+  it('entiende etiquetas en español', () => {
+    const lista = [
+      { id: '1', etiqueta: 'Cámara frontal' },
+      { id: '2', etiqueta: 'Gran angular trasera' },
+      { id: '3', etiqueta: 'Cámara trasera' },
+    ];
+    expect(mejorCamaraTrasera(lista)?.id).toBe('3');
+  });
+
+  it('sin nombres reales no adivina: deja que el sistema elija', () => {
+    // Antes de conceder el permiso el navegador devuelve etiquetas vacías, y
+    // "Cámara 2" es relleno nuestro. Elegir ahí sería tirar una moneda.
+    expect(mejorCamaraTrasera([{ id: 'a', etiqueta: '' }])).toBeNull();
+    expect(mejorCamaraTrasera([{ id: 'a', etiqueta: 'Cámara 1' }])).toBeNull();
+  });
+
+  it('solo reabre la cámara cuando el cambio vale el parpadeo', () => {
+    const lista = [
+      { id: '1', etiqueta: 'Back Camera' },
+      { id: '2', etiqueta: 'Back Ultra Wide Camera' },
+    ];
+    // El sistema nos dio la ultra ancha: ese SÍ es el caso de "no escanea".
+    expect(convieneCambiar('Back Ultra Wide Camera', lista)?.id).toBe('1');
+    // Ya tenemos la buena: no se toca.
+    expect(convieneCambiar('Back Camera', lista)).toBeNull();
+  });
+
+  it('con una sola cámara trasera no hay nada que cambiar', () => {
+    const lista = [{ id: '1', etiqueta: 'Back Camera' }];
+    expect(convieneCambiar('Back Camera', lista)).toBeNull();
+  });
+});
+
+describe('explicar por qué no hay cámara', () => {
+  it('nombra el http como la causa, que es la que nadie adivina', () => {
+    // Probar desde el teléfono entrando a http://192.168.1.5:5173 deja
+    // getUserMedia sin existir. El mensaje genérico manda a buscar el
+    // problema en el permiso del teléfono, que está bien.
+    const m = diagnosticoSinCamara({
+      contextoSeguro: false,
+      hayApi: false,
+      origen: 'http://192.168.1.5:5173',
+    });
+    expect(m).toContain('https');
+    expect(m).toContain('http://192.168.1.5:5173');
+  });
+
+  it('en https sin API culpa al navegador, no a la dirección', () => {
+    const m = diagnosticoSinCamara({ contextoSeguro: true, hayApi: false });
+    expect(m).toContain('navegador');
+    expect(m).not.toContain('https');
+  });
+
+  it('con todo en orden no inventa una causa', () => {
+    expect(diagnosticoSinCamara({ contextoSeguro: true, hayApi: true })).toBe(
+      'No se pudo abrir la cámara.',
+    );
   });
 });
