@@ -124,7 +124,7 @@ describe('Movimientos: balance y bloqueos', () => {
     const sp = await prismaAdmin.storeProduct.findUniqueOrThrow({
       where: { storeId_productId: { storeId: storeA.id, productId } },
     });
-    expect(sp.avgCost).toBe(600n);
+    expect(Number(sp.avgCost)).toBe(600);
     expect(sp.stockQty.toFixed(3)).toBe('20.000');
   });
 

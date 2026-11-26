@@ -21,8 +21,23 @@ type Tx = Prisma.TransactionClient;
 interface StockRow {
   id: string;
   stock_qty: Prisma.Decimal;
-  avg_cost: bigint;
+  /** CPP con 4 decimales de centavo (ver migración cpp_con_decimales). */
+  avg_cost: Prisma.Decimal;
   min_stock: Prisma.Decimal;
+}
+
+/**
+ * El CPP se guarda con decimales, pero lo que se CONGELA en una venta es
+ * dinero: `unit_cost_at_sale` es BIGINT en centavos enteros (A9). Aquí se
+ * cruza esa frontera, y se cruza redondeando — nunca truncando.
+ */
+function aCentavosEnteros(valor: Prisma.Decimal): bigint {
+  return BigInt(valor.toFixed(0));
+}
+
+/** Centavos con 4 decimales, listos para guardar. */
+function aCentavosConDecimales(valor: number): string {
+  return (Math.round(valor * 10000) / 10000).toFixed(4);
 }
 
 export interface MovementResult {
@@ -122,7 +137,7 @@ export async function applyMovement(
     productId: input.productId,
     type: input.type,
     qty,
-    unitCost: row.avg_cost,
+    unitCost: aCentavosEnteros(row.avg_cost),
     balanceAfter,
     userId: input.userId,
     refType: input.refType,
@@ -136,7 +151,7 @@ export async function applyMovement(
     stockQty: Number(row.stock_qty),
     minStock: Number(row.min_stock),
   });
-  return { movementId, balanceAfter, unitCost: row.avg_cost };
+  return { movementId, balanceAfter, unitCost: aCentavosEnteros(row.avg_cost) };
 }
 
 /**
@@ -175,14 +190,15 @@ export async function applyCostedEntry(
   const inQty = Number(qty);
   const inCost = Number(input.unitCost);
   // Si no había stock positivo, el costo entrante define el CPP.
-  const newAvg =
-    prevStock <= 0
-      ? Math.round(inCost)
-      : Math.round((prevStock * prevCost + inQty * inCost) / (prevStock + inQty));
+  // Sin redondear al centavo: el promedio conserva 4 decimales para que la
+  // valorizacion del inventario cuadre con lo que se pago de verdad.
+  const newAvg = aCentavosConDecimales(
+    prevStock <= 0 ? inCost : (prevStock * prevCost + inQty * inCost) / (prevStock + inQty),
+  );
 
   const updated = await tx.$queryRaw<StockRow[]>`
     UPDATE store_products
-    SET stock_qty = stock_qty + ${qty}::numeric, avg_cost = ${newAvg}, updated_at = now()
+    SET stock_qty = stock_qty + ${qty}::numeric, avg_cost = ${newAvg}::numeric, updated_at = now()
     WHERE store_id = ${input.storeId}::uuid AND product_id = ${input.productId}::uuid
     RETURNING id, stock_qty, avg_cost, min_stock`;
 
@@ -252,17 +268,15 @@ export async function applyCostedExit(
   }
   const newStock = prevStock - outQty;
   const prevCost = Number(row.avg_cost);
-  const newAvg =
+  const newAvg = aCentavosConDecimales(
     newStock <= 0
       ? prevCost // sin base para recalcular: conserva el CPP vigente
-      : Math.max(
-          0,
-          Math.round((prevStock * prevCost - outQty * Number(input.unitCost)) / newStock),
-        );
+      : Math.max(0, (prevStock * prevCost - outQty * Number(input.unitCost)) / newStock),
+  );
 
   const updated = await tx.$queryRaw<StockRow[]>`
     UPDATE store_products
-    SET stock_qty = stock_qty - ${qty}::numeric, avg_cost = ${newAvg}, updated_at = now()
+    SET stock_qty = stock_qty - ${qty}::numeric, avg_cost = ${newAvg}::numeric, updated_at = now()
     WHERE store_id = ${input.storeId}::uuid AND product_id = ${input.productId}::uuid
     RETURNING id, stock_qty, avg_cost, min_stock`;
 

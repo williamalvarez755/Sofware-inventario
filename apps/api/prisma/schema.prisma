@@ -341,7 +341,11 @@ model StoreProduct {
   storeId       String   @map("store_id") @db.Uuid
   productId     String   @map("product_id") @db.Uuid
   stockQty      Decimal  @default(0) @map("stock_qty") @db.Decimal(12, 3)
-  avgCost       BigInt   @default(0) @map("avg_cost") // CPP en centavos
+  // CPP en centavos CON 4 DECIMALES: es un valor derivado, no un monto que
+  // se cobre, y redondearlo al centavo desviaba la valorizacion del
+  // inventario (ver migracion cpp_con_decimales). El API lo redondea al
+  // salir, asi que el contrato no cambia.
+  avgCost       Decimal  @default(0) @map("avg_cost") @db.Decimal(16, 4)
   minStock      Decimal  @default(0) @map("min_stock") @db.Decimal(12, 3)
   priceOverride BigInt?  @map("price_override")
   isActive      Boolean  @default(true) @map("is_active")

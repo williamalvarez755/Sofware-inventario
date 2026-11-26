@@ -255,7 +255,7 @@ async function seedDemoProducts(tenantId: string, storeId: string, userId: strin
         storeId,
         productId: product.id,
         stockQty: qty,
-        avgCost: d.cost,
+        avgCost: d.cost.toString(), // avg_cost es NUMERIC(16,4) desde cpp_con_decimales
         minStock: 10,
       },
     });

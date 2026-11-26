@@ -445,7 +445,12 @@ export function getInventoryReport(
       }[]
     >(Prisma.sql`
       SELECT sp.product_id, st.name AS store, p.name, p.sku, c.name AS category, un.code AS unit,
-             sp.stock_qty::text, sp.min_stock::text, sp.avg_cost,
+             sp.stock_qty::text, sp.min_stock::text,
+             -- El CPP se GUARDA con 4 decimales y se MUESTRA al centavo: el
+             -- contrato del API no cambia. La valorizacion, en cambio, se
+             -- calcula con el valor preciso, que es lo que hacia que el
+             -- inventario no cuadrara con lo pagado.
+             ROUND(sp.avg_cost)::bigint AS avg_cost,
              ROUND(sp.stock_qty * sp.avg_cost)::bigint AS stock_value,
              COALESCE(sp.price_override, p.base_price) AS price,
              (sp.min_stock > 0 AND sp.stock_qty <= sp.min_stock) AS low

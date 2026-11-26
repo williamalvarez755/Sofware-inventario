@@ -91,7 +91,7 @@ describe('Compras y CPP', () => {
     expect(first.body.total).toBe('7000');
 
     let sp = await storeProductOf(productId);
-    expect(sp.avgCost).toBe(600n); // (10×500 + 10×700) / 20
+    expect(Number(sp.avgCost)).toBe(600); // (10×500 + 10×700) / 20
     expect(sp.stockQty.toFixed(3)).toBe('20.000');
 
     const second = await request(app)
@@ -105,7 +105,7 @@ describe('Compras y CPP', () => {
     expect(second.status).toBe(201);
 
     sp = await storeProductOf(productId);
-    expect(sp.avgCost).toBe(720n); // (20×600 + 30×800) / 50
+    expect(Number(sp.avgCost)).toBe(720); // (20×600 + 30×800) / 50
     expect(sp.stockQty.toFixed(3)).toBe('50.000');
 
     // Kardex con referencia a la compra y último costo del proveedor
@@ -129,7 +129,7 @@ describe('Compras y CPP', () => {
         supplierId: supplierA.id,
         items: [{ productId, qty: 10, unitCost: 700 }],
       });
-    expect((await storeProductOf(productId)).avgCost).toBe(600n);
+    expect(Number((await storeProductOf(productId)).avgCost)).toBe(600);
 
     const voided = await request(app)
       .post(`/api/purchases/${purchase.body.id}/void`)
@@ -140,7 +140,7 @@ describe('Compras y CPP', () => {
 
     const sp = await storeProductOf(productId);
     expect(sp.stockQty.toFixed(3)).toBe('10.000');
-    expect(sp.avgCost).toBe(500n); // reversa exacta: (20×600 − 10×700) / 10
+    expect(Number(sp.avgCost)).toBe(500); // reversa exacta: (20×600 − 10×700) / 10
 
     const again = await request(app)
       .post(`/api/purchases/${purchase.body.id}/void`)
@@ -344,5 +344,40 @@ describe('Validación de proveedor (informe E9)', () => {
       const res = await crear({ name: `Proveedor válido ${i} ${Date.now()}`, ...extra });
       expect(res.status, JSON.stringify(extra)).toBe(201);
     }
+  });
+});
+
+describe('Valorización del inventario (informe E7)', () => {
+  /**
+   * El informe: "El costo promedio se guarda con 2 decimales y el valor no
+   * cuadra: Coca-Cola 600 ml vale Q388.37, pero se pagaron Q388.20."
+   *
+   * El caso que lo produce: un costo unitario que NO cae en centavo exacto.
+   * 3 unidades a Q10.00 y 3 a Q10.01 dan un promedio de 1000.5 centavos.
+   * Con el CPP guardado al centavo entero, ese medio centavo se redondeaba y
+   * luego se multiplicaba por las 6 unidades: la valorización se iba 3
+   * centavos de lo realmente pagado. Con 4 decimales, cuadra al centavo.
+   */
+  it('el inventario vale exactamente lo que se pagó, con costos de centavo partido', async () => {
+    const producto = await newProduct(3, 1000n); // 3 uds a Q10.00
+
+    const compra = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        storeId: storeA.id,
+        supplierId: supplierA.id,
+        supplierInvoice: `F-MEDIO-${Date.now()}`,
+        items: [{ productId: producto, qty: 3, unitCost: 1001 }], // 3 uds a Q10.01
+      });
+    expect(compra.status).toBe(201);
+
+    const sp = await storeProductOf(producto);
+    // (3×1000 + 3×1001) / 6 = 1000.5 exacto, no 1000 ni 1001.
+    expect(Number(sp.avgCost)).toBe(1000.5);
+
+    const pagado = 3 * 1000 + 3 * 1001; // 6003 centavos = Q60.03
+    const valorizado = Math.round(Number(sp.stockQty) * Number(sp.avgCost));
+    expect(valorizado).toBe(pagado);
   });
 });

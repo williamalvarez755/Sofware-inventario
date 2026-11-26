@@ -68,7 +68,8 @@ function toProductRow(p: ProductRowSource, includeCosts: boolean) {
           stockQty: sp.stockQty,
           minStock: sp.minStock,
           lowStock: Number(sp.minStock) > 0 && Number(sp.stockQty) <= Number(sp.minStock),
-          ...(includeCosts ? { avgCost: sp.avgCost } : {}),
+          // El CPP viaja al centavo entero: por dentro tiene 4 decimales.
+          ...(includeCosts ? { avgCost: BigInt(sp.avgCost.toFixed(0)) } : {}),
         }
       : {}),
   };
@@ -190,7 +191,7 @@ export async function getProduct(db: TenantClient, id: string, includeCosts: boo
       minStock: sp.minStock,
       priceOverride: sp.priceOverride,
       isActive: sp.isActive,
-      ...(includeCosts ? { avgCost: sp.avgCost } : {}),
+      ...(includeCosts ? { avgCost: BigInt(sp.avgCost.toFixed(0)) } : {}),
     })),
   };
 }
