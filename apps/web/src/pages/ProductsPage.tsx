@@ -616,9 +616,15 @@ function CreateProductModal({
   const [busy, setBusy] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
 
+  // Tocar cualquier campo limpia el aviso anterior. El informe: "El aviso de
+  // codigo repetido sigue en pantalla aunque se borre el codigo" — el error
+  // es del intento pasado, no del formulario que la persona esta corrigiendo,
+  // y dejarlo puesto hace creer que el problema sigue ahi.
   const set = (k: keyof typeof form) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      setError(null);
       setForm((f) => ({ ...f, [k]: e.target.value }));
+    };
 
   async function submit(e: FormEvent) {
     e.preventDefault();
