@@ -263,11 +263,43 @@ export const salesListQuerySchema = z.object({
 });
 
 // ---- Proveedores y compras (Fase 3) ----
+/**
+ * NIT guatemalteco.
+ *
+ * Acepta digitos con guion opcional y digito verificador que puede ser K
+ * ("1234567-K"), y tambien "CF" (consumidor final), que es lo que lleva la
+ * mitad de los comprobantes de una tienda. NO valida el digito verificador
+ * contra su formula: un proveedor extranjero o uno que dicto mal su NIT no
+ * puede quedar fuera del sistema por eso — el objetivo es atajar "abc", que
+ * es lo que el informe encontro aceptado sin aviso.
+ */
+const nitGt = z
+  .string()
+  .trim()
+  .max(20)
+  .refine((v) => v === '' || /^(CF|cf|[0-9]{3,12}-?[0-9kK])$/.test(v.replace(/\s/g, '')), {
+    message: 'NIT no válido. Use el formato 1234567-8, o CF para consumidor final',
+  });
+
+/**
+ * Telefono. Digitos, espacios, guiones y un "+" inicial opcional; al menos
+ * siete digitos reales, que es lo mas corto que marca alguien en Guatemala.
+ * Se queda deliberadamente laxo con la forma: lo que se rechaza es que
+ * alguien escriba "hola".
+ */
+const telefono = z
+  .string()
+  .trim()
+  .max(20)
+  .refine((v) => v === '' || (/^\+?[0-9\s-]+$/.test(v) && v.replace(/\D/g, '').length >= 7), {
+    message: 'Teléfono no válido. Escriba solo números, por ejemplo 5555-1234',
+  });
+
 export const supplierSchema = z.object({
   name: z.string().trim().min(2, 'Nombre muy corto').max(80),
-  taxId: z.string().trim().max(20).optional(),
+  taxId: nitGt.optional(),
   contactName: z.string().trim().max(80).optional(),
-  phone: z.string().trim().max(20).optional(),
+  phone: telefono.optional(),
   email: z.string().email().toLowerCase().trim().optional(),
   notes: z.string().trim().max(300).optional(),
 });

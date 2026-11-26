@@ -314,3 +314,35 @@ describe('Gastos', () => {
     expect(log).not.toBeNull();
   });
 });
+
+describe('Validación de proveedor (informe E9)', () => {
+  /** El informe: "Acepta NIT 'abc' y teléfono 'hola' sin avisar." */
+  const crear = (body: Record<string, unknown>) =>
+    request(app).post('/api/suppliers').set('Authorization', `Bearer ${ownerToken}`).send(body);
+
+  it('rechaza un NIT que no es un NIT', async () => {
+    const res = await crear({ name: 'Distribuidora Prueba NIT', taxId: 'abc' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rechaza un teléfono que no es un teléfono', async () => {
+    const res = await crear({ name: 'Distribuidora Prueba Tel', phone: 'hola' });
+    expect(res.status).toBe(400);
+  });
+
+  it('acepta los formatos que se usan de verdad en Guatemala', async () => {
+    // Con guion, sin guion, con dígito verificador K, CF, y teléfono con y
+    // sin código de país. Un proveedor sin NIT tampoco puede quedar fuera.
+    const validos = [
+      { taxId: '1234567-8', phone: '5555-1234' },
+      { taxId: '12345678', phone: '55551234' },
+      { taxId: '1234567-K', phone: '+502 5555 1234' },
+      { taxId: 'CF' },
+      {},
+    ];
+    for (const [i, extra] of validos.entries()) {
+      const res = await crear({ name: `Proveedor válido ${i} ${Date.now()}`, ...extra });
+      expect(res.status, JSON.stringify(extra)).toBe(201);
+    }
+  });
+});
