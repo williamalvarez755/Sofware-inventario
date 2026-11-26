@@ -5,6 +5,8 @@ import { CameraScanner } from '../components/CameraScanner';
 import { Icon } from '../components/Icon';
 import { Page } from '../components/AppShell';
 import { Receipt, type ReceiptData } from '../components/Receipt';
+import { camaraRecordada } from '../lib/escaner';
+import { cargarLectorWasm } from '../lib/zxingWasm';
 import {
   Button,
   Empty,
@@ -63,6 +65,21 @@ export function PosPage() {
       setStores(s);
       if (s.length) setStoreId(s[0]!.id);
     });
+  }, []);
+
+  /**
+   * Precalentar el decodificador de códigos, pero SOLO en los equipos que
+   * usan la cámara.
+   *
+   * El módulo son 412 KB comprimidos. Bajarlo en cada carga del punto de
+   * venta le cobraría ese tráfico a quien escanea con lector físico y nunca
+   * va a abrir la cámara — y en una tienda la conexión a veces se paga por
+   * megabyte. Haber elegido una cámara antes es la señal de que este equipo
+   * sí la usa: para ese, el decodificador queda listo desde que se abre la
+   * pantalla y el visor arranca sin bajar nada.
+   */
+  useEffect(() => {
+    if (camaraRecordada()) void cargarLectorWasm();
   }, []);
 
   useEffect(() => {
@@ -310,9 +327,15 @@ export function PosPage() {
                     className="glass h-14 w-full rounded-2xl pl-11 pr-4 text-base text-[hsl(var(--text-1))] placeholder:text-[hsl(var(--text-3))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]"
                   />
                 </div>
+                {/* `onPointerDown` empieza a bajar el decodificador al APOYAR el
+                    dedo, unos cientos de milisegundos antes de que el visor se
+                    monte. No abre la cámara ni pide permiso: solo adelanta una
+                    descarga que, si no, se pagaba con el visor ya abierto y en
+                    negro. */}
                 <button
                   type="button"
                   onClick={() => setShowCamera(true)}
+                  onPointerDown={() => void cargarLectorWasm()}
                   aria-label="Escanear con la cámara"
                   title="Escanear con la cámara"
                   className="glass flex size-14 shrink-0 items-center justify-center rounded-2xl text-[hsl(var(--text-2))] transition-colors hover:text-[hsl(var(--accent))]"

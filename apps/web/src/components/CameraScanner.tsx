@@ -15,6 +15,7 @@ import {
   linternaRecordada,
   listarCamaras,
   luminanciaMedia,
+  mejorCamaraTrasera,
   mensajeDeAyuda,
   olvidarCamara,
   pedirEnfoqueContinuo,
@@ -55,6 +56,15 @@ import { Icon } from './Icon';
 interface BarcodeDetectorLike {
   detect(source: CanvasImageSource): Promise<{ rawValue: string }[]>;
 }
+/**
+ * Lo mínimo que se le pide al lector de JavaScript, declarado a mano para no
+ * importar sus tipos: la librería entera solo se baja si el WebAssembly falla,
+ * y un `import type` la ata al grafo de módulos aunque nunca se use.
+ */
+interface LectorZxing {
+  decodeFromCanvas(lienzo: HTMLCanvasElement): { getText(): string } | null;
+}
+
 interface BarcodeDetectorCtor {
   new (options?: { formats?: string[] }): BarcodeDetectorLike;
   getSupportedFormats?(): Promise<string[]>;
@@ -84,6 +94,20 @@ export function CameraScanner({
 
   const [error, setError] = useState<string | null>(null);
   const [motor, setMotor] = useState<'nativo' | 'zxing' | 'wasm' | null>(null);
+
+  /**
+   * En qué va el arranque de la cámara.
+   *
+   * EXISTE PORQUE LA ESPERA SE VEÍA COMO UNA FALLA. Abrir la cámara en un
+   * teléfono tarda de medio segundo a dos, y el visor mostraba un rectángulo
+   * NEGRO todo ese rato, sin una palabra. El reporte del dueño fue exacto:
+   * "abre el escáner y se queda negra la pantalla, como que la cámara no
+   * iniciara". No era un error: era silencio. Parte de este arreglo es hacer
+   * el arranque más rápido, y la otra parte —igual de importante— es decir
+   * en qué va, porque una espera explicada se tolera y una muda se reporta
+   * como defecto.
+   */
+  const [fase, setFase] = useState<'permiso' | 'abriendo' | 'vivo'>('permiso');
   const [caps, setCaps] = useState<Capacidades>({
     linterna: false,
     zoom: null,
@@ -172,12 +196,17 @@ export function CameraScanner({
         return;
       }
 
-      // Resolución alta a propósito: más píxeles son más módulos por barra, y
-      // eso es lo que decide si un código pequeño o algo lejano se lee. Media
-      // tienda tiene equipos que entregan 640×480 si uno no pide nada.
+      // 720p, NO 1080p — y el cálculo que lo justifica. Un EAN-13 son 95
+      // módulos. A 1280 de ancho, la franja de análisis mide 1152 px; un código
+      // que ocupe la mitad de ella da ~6 píxeles por módulo, cuando con 2 o 3
+      // ya se decodifica (medido: el WebAssembly lee uno limpio a 1 píxel por
+      // módulo). O sea que 1080p compraba margen que no hacía falta, y lo
+      // pagaba DOS veces: la cámara tarda más en entregar el primer cuadro
+      // —que es el rato de pantalla negra— y cada cuadro mueve 2,25 veces más
+      // píxeles. El `min: 640` deja pasar a los equipos viejos.
       const IDEALES = {
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        width: { ideal: 1280, min: 640 },
+        height: { ideal: 720 },
         frameRate: { ideal: 30 },
       };
 
@@ -194,8 +223,32 @@ export function CameraScanner({
        * El último intento es `video: true` a secas: si un equipo raro no
        * tolera ni los valores ideales, más vale una cámara mala que ninguna.
        */
+      /**
+       * ELEGIR LA CÁMARA ANTES DE ABRIRLA, no después.
+       *
+       * Antes se abría con `facingMode`, se miraba qué había dado el sistema y,
+       * si era la ultra gran angular, se REABRÍA con la buena. Correcto en el
+       * resultado y carísimo en el camino: dos arranques de cámara seguidos, o
+       * sea el doble de pantalla negra, en el equipo donde ya era lenta.
+       *
+       * `enumerateDevices()` cuesta milisegundos y devuelve los nombres en
+       * cuanto el permiso ya se concedió — o sea siempre, salvo la primerísima
+       * vez. Con los nombres se elige bien de entrada y se abre UNA sola vez.
+       * La primera vez de todas no hay nombres, y ahí sí puede reabrir: una vez
+       * en la vida del equipo, porque la elección queda recordada.
+       */
+      let elegida = camaraId;
+      if (!elegida) {
+        const mejor = mejorCamaraTrasera(await listarCamaras());
+        if (mejor) {
+          elegida = mejor.id;
+          recordarCamara(mejor.id);
+        }
+      }
+      if (cancelado) return;
+
       const intentos: MediaStreamConstraints[] = [
-        ...(camaraId ? [{ video: { deviceId: { exact: camaraId }, ...IDEALES } }] : []),
+        ...(elegida ? [{ video: { deviceId: { exact: elegida }, ...IDEALES } }] : []),
         { video: { facingMode: { ideal: 'environment' }, ...IDEALES } },
         { video: true },
       ];
@@ -210,7 +263,7 @@ export function CameraScanner({
           // El permiso denegado no se arregla pidiendo menos: no insistir.
           if (ultimoFallo?.name === 'NotAllowedError') break;
           // Si lo que falló fue la cámara recordada, se descarta de una vez.
-          if (i === 0 && camaraId) olvidarCamara();
+          if (i === 0 && elegida) olvidarCamara();
         }
       }
 
@@ -247,19 +300,42 @@ export function CameraScanner({
       video.setAttribute('muted', '');
       video.setAttribute('playsinline', '');
       video.srcObject = stream;
+      if (!cancelado) setFase('abriendo');
+
+      // Pasar a "vivo" en cuanto haya imagen DE VERDAD, no cuando `play()`
+      // resuelva: en iOS resuelve antes de que se pinte el primer cuadro, y
+      // anunciarlo ahí dejaría el mismo negro sin aviso que se quiere quitar.
+      // `loadeddata` y `playing` cubren los dos navegadores; gana el primero.
+      let yaVivo = false;
+      const marcarVivo = () => {
+        if (yaVivo || cancelado) return;
+        yaVivo = true;
+        setFase('vivo');
+      };
+      video.addEventListener('loadeddata', marcarVivo, { once: true });
+      video.addEventListener('playing', marcarVivo, { once: true });
+
       await video.play().catch(() => undefined);
+      if (video.readyState >= 2) marcarVivo();
 
       const track = stream.getVideoTracks()[0] ?? null;
       trackRef.current = track;
 
       const capacidades = leerCapacidades(track);
       if (!cancelado) setCaps(capacidades);
-      if (capacidades.enfoqueContinuo) await pedirEnfoqueContinuo(track);
       if (capacidades.zoom) setZoom(capacidades.zoom.min);
+
+      // SIN `await`: ni el enfoque ni la linterna son requisitos para ver la
+      // imagen ni para decodificar, y cada `applyConstraints` tarda decenas o
+      // cientos de milisegundos en un teléfono. Esperarlos aquí retrasaba el
+      // arranque del bucle sin que nada lo necesitara.
+      if (capacidades.enfoqueContinuo) void pedirEnfoqueContinuo(track);
 
       // La linterna se recuerda: una tienda oscura lo es todos los días.
       if (capacidades.linterna && linternaRecordada()) {
-        if (await cambiarLinterna(track, true)) setLinterna(true);
+        void cambiarLinterna(track, true).then((ok) => {
+          if (ok && !cancelado) setLinterna(true);
+        });
       } else {
         setLinterna(false);
       }
@@ -268,26 +344,28 @@ export function CameraScanner({
         if (cancelado) return;
         setCamaras(lista);
 
-        // SI EL SISTEMA NOS DIO LA CÁMARA EQUIVOCADA, CAMBIARLA SIN PREGUNTAR.
-        // `facingMode: environment` deja que el sistema elija entre las tres o
-        // cuatro traseras de un teléfono moderno, y muchas veces elige la ultra
-        // gran angular, que reparte los píxeles en un campo tres veces más
-        // ancho y deforma el código. Esa es la causa de "en este teléfono no
-        // escanea". Solo se reabre cuando el cambio vale el parpadeo, y nunca
-        // si el cajero ya eligió una a mano.
-        if (camaraId) return;
+        // RED DE SEGURIDAD PARA LA PRIMERÍSIMA VEZ. Si se abrió con
+        // `facingMode` porque todavía no había nombres (sin permiso concedido)
+        // y el sistema dio la ultra gran angular —que no enfoca a los 15 cm
+        // donde se pone un código—, aquí ya hay nombres y se corrige. Reabre
+        // la cámara, que cuesta, pero pasa UNA vez por equipo: la elección
+        // queda recordada y la próxima abre directo con la buena.
+        if (elegida) return;
         const mejor = convieneCambiar(track?.label ?? null, lista);
         if (mejor) {
           recordarCamara(mejor.id);
-          setCamaraId(mejor.id); // reabre el efecto con la cámara buena
+          setCamaraId(mejor.id);
         }
       });
 
-      try {
-        wakeLock = (await navigator.wakeLock?.request('screen')) ?? null;
-      } catch {
-        /* es un lujo, no un requisito */
-      }
+      // Tampoco se espera: mantener la pantalla encendida es un lujo, y
+      // pedirlo bloqueaba el arranque del decodificador.
+      void navigator.wakeLock
+        ?.request('screen')
+        .then((s) => {
+          wakeLock = s;
+        })
+        .catch(() => undefined);
 
       const lienzo = document.createElement('canvas');
       const ctx = lienzo.getContext('2d', { willReadFrequently: true });
@@ -408,55 +486,60 @@ export function CameraScanner({
         return;
       }
 
-      setMotor('zxing');
-
       /**
-       * El WebAssembly se carga EN PARALELO, no antes de empezar.
+       * UN SOLO DECODIFICADOR EN LA RUTA CRÍTICA.
        *
-       * Son unos cientos de kilobytes: esperarlo dejaría el visor muerto los
-       * primeros segundos, que es justo cuando el cajero ya está apuntando. Así
-       * que se empieza a decodificar con la versión de JavaScript y, en cuanto
-       * el módulo está listo, el bucle lo usa a él y nada más. El cambio no se
-       * nota salvo en la velocidad.
+       * Antes se bajaban LOS DOS: se arrancaba con la librería de JavaScript
+       * —unos 400 KB que el navegador tiene que descargar, parsear y ejecutar—
+       * mientras el WebAssembly venía en paralelo para reemplazarla. La idea
+       * era no dejar el visor muerto los primeros segundos; el efecto real fue
+       * peor: dos descargas grandes compitiendo por la red y por el hilo
+       * principal, que es el mismo hilo que tiene que pintar el vídeo. Eso es
+       * parte de la pantalla negra.
+       *
+       * Ahora se espera solo al WebAssembly, que es el que de verdad se va a
+       * usar, y la librería de JavaScript únicamente se baja si aquel falla.
+       * Y como el módulo se precalienta al abrir el punto de venta, lo normal
+       * es que ya esté listo cuando el cajero toca el botón.
        */
-      let wasm: LectorWasm | null = null;
-      void cargarLectorWasm().then((lector) => {
-        if (cancelado || !lector) return;
-        wasm = lector;
-        setMotor('wasm');
-      });
+      const wasm = await cargarLectorWasm();
+      if (cancelado) return;
+      setMotor(wasm ? 'wasm' : 'zxing');
+
+      const MS_ANTES_DE_INSISTIR = 2500;
+      let lectorRapido: LectorZxing | null = null;
+      let lectorInsistente: LectorZxing | null = null;
 
       try {
-        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
-          import('@zxing/browser'),
-          import('@zxing/library'),
-        ]);
-        if (cancelado) return;
+        if (!wasm) {
+          const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] =
+            await Promise.all([import('@zxing/browser'), import('@zxing/library')]);
+          if (cancelado) return;
 
-        const formatos = [
-          BarcodeFormat.EAN_13,
-          BarcodeFormat.EAN_8,
-          BarcodeFormat.UPC_A,
-          BarcodeFormat.UPC_E,
-          BarcodeFormat.CODE_128,
-          BarcodeFormat.CODE_39,
-          BarcodeFormat.ITF,
-        ];
-        const rapido = new Map();
-        rapido.set(DecodeHintType.POSSIBLE_FORMATS, formatos);
+          const formatos = [
+            BarcodeFormat.EAN_13,
+            BarcodeFormat.EAN_8,
+            BarcodeFormat.UPC_A,
+            BarcodeFormat.UPC_E,
+            BarcodeFormat.CODE_128,
+            BarcodeFormat.CODE_39,
+            BarcodeFormat.ITF,
+          ];
+          const rapido = new Map();
+          rapido.set(DecodeHintType.POSSIBLE_FORMATS, formatos);
 
-        /**
-         * Lector INSISTENTE: `TRY_HARDER` prueba más filas y más escalas del
-         * mismo cuadro. Cuesta varias veces más, así que no se usa de
-         * entrada; se enciende tras unos segundos sin leer, que es cuando al
-         * cajero ya le vale más una lectura lenta que ninguna.
-         */
-        const insistente = new Map(rapido);
-        insistente.set(DecodeHintType.TRY_HARDER, true);
+          /**
+           * Lector INSISTENTE: `TRY_HARDER` prueba más filas y más escalas del
+           * mismo cuadro. Cuesta varias veces más, así que no se usa de
+           * entrada; se enciende tras unos segundos sin leer, que es cuando al
+           * cajero ya le vale más una lectura lenta que ninguna.
+           */
+          const insistente = new Map(rapido);
+          insistente.set(DecodeHintType.TRY_HARDER, true);
 
-        const lectorRapido = new BrowserMultiFormatReader(rapido);
-        const lectorInsistente = new BrowserMultiFormatReader(insistente);
-        const MS_ANTES_DE_INSISTIR = 2500;
+          lectorRapido = new BrowserMultiFormatReader(rapido);
+          lectorInsistente = new BrowserMultiFormatReader(insistente);
+        }
 
         /**
          * Invierte el lienzo. Algunas básculas y etiquetadoras imprimen el
@@ -511,8 +594,8 @@ export function CameraScanner({
                   if (negativo) emitir(negativo);
                 }
               }
-            } else {
-              const lector = duro ? lectorInsistente : lectorRapido;
+            } else if (lectorRapido) {
+              const lector = (duro ? lectorInsistente : lectorRapido) ?? lectorRapido;
               const fuente = prepararLienzo(true);
               if (fuente) {
                 if (cuadro % 15 === 0) medirLuz();
@@ -590,13 +673,35 @@ export function CameraScanner({
           className="h-full w-full cursor-pointer object-contain"
           aria-label="Vista de la cámara para escanear códigos. Tóquela para enfocar."
         />
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        {/* MIENTRAS NO HAY IMAGEN, DECIRLO. El rectángulo negro y mudo era el
+            defecto reportado: "abre el escáner y se queda negra la pantalla,
+            como que la cámara no iniciara". Abrir la cámara de un teléfono
+            tarda, y eso no se puede llevar a cero; lo que sí se puede es que
+            la espera se vea como una espera y no como una falla. */}
+        {fase !== 'vivo' && !error && (
           <div
-            className={`h-[38%] w-[90%] rounded-lg border-2 transition-colors ${
-              ultimo ? 'border-[hsl(var(--ok))]' : 'border-[hsl(var(--ok)/0.85)]'
-            } shadow-[0_0_0_9999px_rgba(0,0,0,0.38)]`}
-          />
-        </div>
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/80"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/25 border-t-white/80" />
+            <span className="text-sm">
+              {fase === 'permiso' ? 'Pidiendo acceso a la cámara…' : 'Iniciando la cámara…'}
+            </span>
+          </div>
+        )}
+
+        {/* La guía aparece con la imagen: encuadrar sobre negro no significa
+            nada, y dibujarla antes hace creer que ya se puede escanear. */}
+        {fase === 'vivo' && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div
+              className={`h-[38%] w-[90%] rounded-lg border-2 transition-colors ${
+                ultimo ? 'border-[hsl(var(--ok))]' : 'border-[hsl(var(--ok)/0.85)]'
+              } shadow-[0_0_0_9999px_rgba(0,0,0,0.38)]`}
+            />
+          </div>
+        )}
         {ultimo && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-[hsl(var(--ok)/0.9)] px-3 py-1.5 text-center text-sm font-semibold text-[hsl(var(--bg-deep))]">
             {ultimo}
