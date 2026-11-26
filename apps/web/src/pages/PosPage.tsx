@@ -18,6 +18,7 @@ import {
 } from '../components/ui';
 import { guardarCarrito, leerCarrito } from '../lib/carrito';
 import { crearColaEscaneos } from '../lib/colaEscaneos';
+import { crearDetectorDeRafaga } from '../lib/rafagaLector';
 import { retryOnNetworkFailure, useOnlineStatus } from '../lib/connection';
 import { isThermalPrintingAvailable, printThermalReceipt } from '../lib/escpos';
 
@@ -159,6 +160,38 @@ export function PosPage() {
         setError(err instanceof ApiError ? err.message : `No se pudo buscar "${codigo}"`),
     ),
   ).current;
+
+  /**
+   * Captura GLOBAL del lector físico (D-010).
+   *
+   * El campo de escaneo solo funciona si tiene el foco, y el foco se va solo
+   * todo el tiempo: al tocar la cantidad de una línea, al cerrar un cuadro de
+   * diálogo, al cambiar de tienda en el selector. El cajero dispara el lector,
+   * no pasa nada, y no tiene cómo saber por qué.
+   *
+   * Escuchar el teclado entero no rompe los demás campos porque la detección
+   * es por VELOCIDAD: un lector teclea unos 4 ms entre teclas y la persona más
+   * rápida no baja de 80 ms sostenidos. Quien escribe en un campo nunca va a
+   * disparar esto.
+   *
+   * Si el foco SÍ está en el campo de escaneo, se deja pasar: de eso se
+   * encarga el formulario, y atenderlo en los dos lados duplicaría la línea.
+   */
+  useEffect(() => {
+    if (!session) return;
+    const detector = crearDetectorDeRafaga();
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (document.activeElement === scanRef.current) return;
+      const codigo = detector.tecla(e.key, e.timeStamp || Date.now());
+      if (codigo) {
+        e.preventDefault();
+        cola.encolar(codigo);
+      }
+    };
+    document.addEventListener('keydown', alTeclear);
+    return () => document.removeEventListener('keydown', alTeclear);
+  }, [session, cola]);
 
   function onScanSubmit(e: FormEvent) {
     e.preventDefault();
