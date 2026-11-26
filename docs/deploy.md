@@ -44,6 +44,18 @@ sin shadow DB ni prompts. Entre ellas se crea el rol `app_runtime` (sin
 ALTER ROLE app_runtime PASSWORD 'una-contrasena-larga-y-aleatoria';
 ```
 
+> **Esto ya no es un consejo: el API no arranca sin ello (D-065).** Si
+> `APP_DATABASE_URL` o `DATABASE_URL` conservan la contraseña `app_runtime_dev`
+> —que está escrita en este repositorio, y el repositorio es público— el
+> servicio sale con código 1 y el log de Render nombra la variable culpable.
+> RLS no protege de esa fuga: quien se conecta con ese rol elige él mismo el
+> `app.tenant_id`. En desarrollo solo avisa.
+>
+> El `npm run db:deploy` de arriba SÍ lleva la contraseña publicada, y está
+> bien: es la única forma de conectarse al rol que la migración acaba de crear,
+> y ese comando no es el servidor — la comprobación solo corre al arrancar el
+> API.
+
 Con eso armás la segunda URI:
 
 ```
@@ -82,12 +94,45 @@ fijarlo.
 |---|---|---|
 | `DATABASE_URL` | URI de `avnadmin` (paso 1.2) | sí |
 | `APP_DATABASE_URL` | URI de `app_runtime` (paso 2) | sí |
-| `JWT_SECRET` | 64+ caracteres aleatorios (`openssl rand -base64 48`) | sí |
+| `JWT_SECRET` | 64+ caracteres aleatorios (`openssl rand -base64 48`). **Mínimo 32, y no el valor de ejemplo del repo: por debajo de eso el API no arranca (D-065).** | sí |
 | `NODE_ENV` | `production` | sí |
 | `CORS_ORIGIN` | URL del Static Site, p. ej. `https://minimarket-web.onrender.com` (acepta varias separadas por coma) | sí |
 | `ACCESS_TOKEN_TTL_MIN` | por defecto `15` | no |
 | `REFRESH_TOKEN_TTL_DAYS` | por defecto `30` | no |
 | `RATE_LIMIT_MULTIPLIER` | `1` en producción — solo la suite de pruebas lo eleva | no |
+
+> **Tres cosas impiden que el API arranque en producción (D-065),** y las tres
+> son credenciales que están publicadas en este repositorio porque hacen falta
+> para levantar el proyecto:
+>
+> 1. `DATABASE_URL` o `APP_DATABASE_URL` con la contraseña `app_runtime_dev`.
+> 2. `JWT_SECRET` igual al valor de ejemplo, o de menos de 32 caracteres.
+> 3. El super admin con su contraseña inicial (se comprueba contra el hash).
+>
+> Una contraseña rotada se puede volver a olvidar en el próximo despliegue; un
+> arranque que se niega, no. Por eso la comprobación vive en el código y no en
+> esta lista de pasos.
+
+> **Los tenants demo NO van a producción.** El seed del paso 2 ya pasa
+> `SEED_DEMO_TENANTS=false`, y desde 2026-11-25 la variable es *opt-in*
+> (`=true`) y se ignora por completo con `NODE_ENV=production` (D-058). Antes
+> fallaba ABIERTO: olvidarla sembraba `tienda-uno` y `tienda-dos` con una
+> contraseña que está en el archivo de seed de un repositorio público.
+>
+> Ni el Build Command ni el Start Command siembran: `db:deploy` es
+> `prisma migrate deploy`, que **no** ejecuta el hook `prisma.seed` (solo lo
+> hacen `migrate dev` y `migrate reset`). Así que los demos solo pueden estar en
+> producción si alguien corrió `db:seed` a mano contra esa base sin la variable.
+> Para comprobarlo, sin necesidad de la base:
+>
+> ```bash
+> curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<tu-api>/api/auth/login \
+>   -H 'Content-Type: application/json' --data '{"username":"owner1","password":"Demo!2026"}'
+> ```
+>
+> `401` es lo que se espera: no hay cuenta demo alcanzable. Un `200` significa
+> que existe y que su contraseña publicada todavía sirve — dé de baja esos dos
+> clientes desde el panel de plataforma y elimínelos.
 
 > **Plan gratuito y el POS:** el free tier de Render duerme el servicio tras
 > ~15 min sin tráfico, y despertarlo tarda ~50 s. En un mostrador con un cliente
