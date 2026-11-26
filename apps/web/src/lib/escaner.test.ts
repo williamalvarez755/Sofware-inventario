@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CADA_CUANTOS_CUADRO_COMPLETO,
   cambiarLinterna,
+  escalaParaDecodificar,
   leerCapacidades,
   regionDeInteres,
   tocaCuadroCompleto,
@@ -119,5 +120,26 @@ describe('linterna', () => {
 
     expect(await cambiarLinterna(track, true)).toBe(false);
     expect(await cambiarLinterna(null, true)).toBe(false);
+  });
+});
+
+describe('escala de decodificación para ZXing', () => {
+  it('reduce los recortes grandes y deja los chicos en paz', () => {
+    // 1728 es el recorte de un vídeo 1080p: se baja a 1024.
+    expect(escalaParaDecodificar(1728)).toBeCloseTo(1024 / 1728, 5);
+    expect(Math.round(1728 * escalaParaDecodificar(1728))).toBe(1024);
+
+    // Nunca amplía: agrandar no inventa detalle, solo trabajo.
+    expect(escalaParaDecodificar(640)).toBe(1);
+    expect(escalaParaDecodificar(1024)).toBe(1);
+    expect(escalaParaDecodificar(0)).toBe(1);
+  });
+
+  it('deja píxeles de sobra para un EAN-13', () => {
+    // 95 módulos; con el código ocupando un tercio del recorte reducido,
+    // quedan ~3 px por módulo incluso en el peor caso aceptado.
+    const anchoFinal = 1728 * escalaParaDecodificar(1728);
+    const pixelesPorModulo = (anchoFinal / 3) / 95;
+    expect(pixelesPorModulo).toBeGreaterThan(3);
   });
 });

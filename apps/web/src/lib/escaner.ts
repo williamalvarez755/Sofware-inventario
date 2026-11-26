@@ -244,3 +244,32 @@ export function recordarCamara(deviceId: string): void {
     /* sin persistencia: hay que elegirla en cada escaneo */
   }
 }
+
+// ───────────────────── Decodificación en JavaScript (iPhone) ────────────────
+
+/**
+ * Ancho máximo del recorte que se le entrega a ZXing.
+ *
+ * POR QUÉ SOLO A ZXING. El detector nativo de Chrome está compilado y traga
+ * 1080p sin despeinarse; ZXing es JavaScript puro y el costo crece con cada
+ * píxel. En iPhone NO EXISTE `BarcodeDetector` —Safari nunca lo implementó—,
+ * así que todos los iPhone caen en ZXing y son justo los que pagan el recorte
+ * grande. De ahí que "en iPhone a veces no da": no es que no lea, es que no
+ * alcanza a leer antes de que la mano se mueva.
+ *
+ * CUÁNTO SE PUEDE BAJAR. Un EAN-13 son 95 módulos (barras y espacios). Para
+ * decodificarlo con holgura hacen falta unos 3 píxeles por módulo, o sea
+ * ~285 px a lo ancho del código. Con 1024 px de recorte, un código que ocupe
+ * un tercio del encuadre todavía tiene 10 px por módulo. Bajar de ahí sí
+ * empieza a comerse las barras finas.
+ */
+export const ANCHO_MAXIMO_ZXING = 1024;
+
+/**
+ * Factor por el que hay que multiplicar el recorte para que no supere el
+ * ancho máximo. Nunca amplía: agrandar no inventa detalle, solo trabajo.
+ */
+export function escalaParaDecodificar(ancho: number, maximo = ANCHO_MAXIMO_ZXING): number {
+  if (ancho <= 0) return 1;
+  return Math.min(1, maximo / ancho);
+}

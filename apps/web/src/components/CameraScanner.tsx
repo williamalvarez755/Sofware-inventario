@@ -6,6 +6,7 @@ import {
   cambiarLinterna,
   cambiarZoom,
   confirmarEscaneo,
+  escalaParaDecodificar,
   leerCapacidades,
   listarCamaras,
   pedirEnfoqueContinuo,
@@ -194,16 +195,25 @@ export function CameraScanner({
       }
 
       let cuadro = 0;
-      /** Dibuja en el lienzo lo que toca analizar y lo devuelve. */
-      function prepararLienzo(): HTMLCanvasElement | null {
+      /**
+       * Dibuja en el lienzo lo que toca analizar y lo devuelve.
+       *
+       * `reducir` solo lo usa ZXing: es JavaScript puro y el costo crece con
+       * cada píxel, mientras que el detector nativo está compilado y traga
+       * 1080p sin problema. Como Safari nunca implementó `BarcodeDetector`,
+       * TODOS los iPhone caen en ZXing — y son justo los que pagaban el
+       * recorte a tamaño completo.
+       */
+      function prepararLienzo(reducir: boolean): HTMLCanvasElement | null {
         const w = video.videoWidth;
         const h = video.videoHeight;
         if (!w || !h) return null;
         const completo = tocaCuadroCompleto(cuadro);
         const r = completo ? { x: 0, y: 0, ancho: w, alto: h } : regionDeInteres(w, h);
-        lienzo.width = r.ancho;
-        lienzo.height = r.alto;
-        ctx!.drawImage(video, r.x, r.y, r.ancho, r.alto, 0, 0, r.ancho, r.alto);
+        const escala = reducir ? escalaParaDecodificar(r.ancho) : 1;
+        lienzo.width = Math.max(1, Math.round(r.ancho * escala));
+        lienzo.height = Math.max(1, Math.round(r.alto * escala));
+        ctx!.drawImage(video, r.x, r.y, r.ancho, r.alto, 0, 0, lienzo.width, lienzo.height);
         return lienzo;
       }
 
@@ -225,7 +235,7 @@ export function CameraScanner({
         const paso = async () => {
           if (cancelado || doneRef.current) return;
           try {
-            const fuente = prepararLienzo();
+            const fuente = prepararLienzo(false);
             if (fuente) {
               const r = await detector.detect(fuente);
               if (r[0]?.rawValue) return emitir(r[0].rawValue);
@@ -251,8 +261,7 @@ export function CameraScanner({
 
         // Mismas restricciones de formato que el motor nativo: ZXing probando
         // los veintitantos simbologías que conoce es varias veces más lento.
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        const formatos = [
           BarcodeFormat.EAN_13,
           BarcodeFormat.EAN_8,
           BarcodeFormat.UPC_A,
@@ -260,17 +269,38 @@ export function CameraScanner({
           BarcodeFormat.CODE_128,
           BarcodeFormat.CODE_39,
           BarcodeFormat.ITF,
-        ]);
-        const reader = new BrowserMultiFormatReader(hints);
+        ];
+
+        const rapido = new Map();
+        rapido.set(DecodeHintType.POSSIBLE_FORMATS, formatos);
+
+        /**
+         * Lector INSISTENTE para cuando el rápido no da.
+         *
+         * `TRY_HARDER` hace que ZXing pruebe más filas y más escalas del
+         * mismo cuadro. Cuesta varias veces más, así que no se usa de
+         * entrada: se enciende tras unos segundos sin leer, que es
+         * exactamente cuando al cajero ya le vale más una lectura lenta que
+         * ninguna. (`ALSO_INVERTED`, para etiquetas blancas sobre fondo
+         * oscuro, no existe en la versión instalada de la librería.)
+         */
+        const insistente = new Map(rapido);
+        insistente.set(DecodeHintType.TRY_HARDER, true);
+
+        const lectorRapido = new BrowserMultiFormatReader(rapido);
+        const lectorInsistente = new BrowserMultiFormatReader(insistente);
+        const comenzo = Date.now();
+        const MS_ANTES_DE_INSISTIR = 2500;
 
         // Bucle propio en vez de `decodeFromVideoElement`: así ZXing también
         // aprovecha el recorte y el cuadro-a-cuadro.
         const paso = () => {
           if (cancelado || doneRef.current) return;
           try {
-            const fuente = prepararLienzo();
+            const fuente = prepararLienzo(true);
             if (fuente) {
-              const r = reader.decodeFromCanvas(fuente);
+              const duro = Date.now() - comenzo > MS_ANTES_DE_INSISTIR;
+              const r = (duro ? lectorInsistente : lectorRapido).decodeFromCanvas(fuente);
               if (r) return emitir(r.getText());
             }
           } catch {
