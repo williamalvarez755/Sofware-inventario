@@ -19,6 +19,7 @@ import {
   Select,
   Table,
 } from '../components/ui';
+import { enfocarAbreTeclado } from '../lib/teclado';
 
 interface StoreOpt { id: string; name: string }
 interface Unit { id: string; code: string; name: string; allowsDecimals: boolean }
@@ -316,10 +317,22 @@ export function ProductsPage() {
 }
 
 /**
+ * Deja el campo listo para el siguiente código, salvo donde eso abriría el
+ * teclado en pantalla: en un teléfono no hay lector físico al que servirle el
+ * campo, y enfocarlo tapa el resultado que la persona acaba de consultar
+ * (ver `teclado.ts`).
+ */
+function volverAlCampo(campo: HTMLInputElement | null) {
+  if (enfocarAbreTeclado()) return;
+  campo?.focus();
+}
+
+/**
  * Alta por escaneo: el flujo real de una tienda es "tomo el producto de la
  * bolsa del proveedor, lo paso por el lector y lo doy de alta". El lector HID
- * escribe en el campo enfocado y termina en Enter, así que el campo se
- * autoenfoca y se vuelve a enfocar tras cada consulta.
+ * escribe en el campo enfocado y termina en Enter, así que el campo recupera
+ * el foco tras cada consulta — en una computadora; en un teléfono eso era
+ * levantar el teclado encima del resultado, y ahí no hay lector que atender.
  *
  * Cuando el código no existe hay DOS salidas, y la segunda es la que evita el
  * problema de verdad: el producto puede existir ya (cargado por CSV, sin
@@ -364,7 +377,7 @@ function ScanModal({
       } finally {
         setBusy(false);
         setCode('');
-        inputRef.current?.focus();
+        volverAlCampo(inputRef.current);
       }
     },
     [storeId],
@@ -382,7 +395,7 @@ function ScanModal({
       onLinked(`Código ${unknown} vinculado a ${nombre}`);
       setUnknown(null);
       setLinking(false);
-      inputRef.current?.focus();
+      volverAlCampo(inputRef.current);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'No se pudo vincular el código');
     } finally {
