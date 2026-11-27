@@ -165,9 +165,14 @@ export function DashboardPage() {
   const { me } = useAuth();
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [storeId, setStoreId] = useState('');
-  const [rangeDays, setRangeDays] = useState(6);
+  // POR DEFECTO, HOY. Quien abre el sistema a las siete de la mañana quiere
+  // saber cómo va SU día, no un promedio de la semana que mezcla el sábado
+  // bueno con el martes flojo. La semana y el mes siguen a un clic.
+  const [rangeDays, setRangeDays] = useState(0);
   const [data, setData] = useState<Dashboard | null>(null);
   const [low, setLow] = useState<LowStockRow[]>([]);
+  // Serie de la semana, solo cuando el rango es "Hoy" (ver load()).
+  const [serieSemana, setSerieSemana] = useState<DayPoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canSeeReports = me?.memberships.some((m) => m.role !== 'WORKER') ?? false;
@@ -180,16 +185,23 @@ export function DashboardPage() {
     if (!canSeeReports) return;
     const params = new URLSearchParams({ from: gtDate(-rangeDays), to: gtDate() });
     if (storeId) params.set('storeId', storeId);
+    const tienda = storeId ? `&storeId=${storeId}` : '';
     setError(null);
     try {
-      const [dashboard, lowStock] = await Promise.all([
+      const [dashboard, lowStock, semana] = await Promise.all([
         api<Dashboard>(`/api/reports/dashboard?${params}`),
-        api<LowStockRow[]>(
-          `/api/reports/inventory?lowOnly=true${storeId ? `&storeId=${storeId}` : ''}`,
-        ),
+        api<LowStockRow[]>(`/api/reports/inventory?lowOnly=true${tienda}`),
+        // Con el rango en "Hoy" la gráfica de ventas por día sería UNA barra,
+        // que no dice nada. Se le pide la semana aparte: la cifra de arriba es
+        // la del día —lo que importa al abrir la tienda— y la gráfica queda
+        // como contexto. En 7 y 30 días la serie del propio rango ya sirve.
+        rangeDays === 0
+          ? api<Dashboard>(`/api/reports/dashboard?from=${gtDate(-6)}&to=${gtDate()}${tienda}`)
+          : null,
       ]);
       setData(dashboard);
       setLow(lowStock.slice(0, 12));
+      setSerieSemana(semana?.series ?? null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Error cargando el resumen');
     }
@@ -298,7 +310,9 @@ export function DashboardPage() {
             />
             <div className="relative flex flex-wrap items-end justify-between gap-x-8 gap-y-6">
               <div>
-                <p className="rotulo">Vendido en el periodo</p>
+                <p className="rotulo">
+                  {rangeDays === 0 ? 'Vendido hoy' : `Vendido en ${rangeDays + 1} días`}
+                </p>
                 <p className="cifra mt-3 text-[clamp(2.6rem,7vw,4rem)] font-bold text-[hsl(var(--text-1))]">
                   {formatQ(BigInt(data.salesTotal))}
                 </p>
@@ -371,9 +385,9 @@ export function DashboardPage() {
                   </Link>
                 }
               >
-                Ventas por día
+                {serieSemana ? 'Ventas de la semana' : 'Ventas por día'}
               </SectionTitle>
-              <SalesChart data={data.series} />
+              <SalesChart data={serieSemana ?? data.series} />
             </Panel>
 
             <Panel className="p-5">

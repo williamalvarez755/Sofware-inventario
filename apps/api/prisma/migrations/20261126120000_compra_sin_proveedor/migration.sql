@@ -1,0 +1,11 @@
+-- El proveedor deja de ser obligatorio en una compra.
+--
+-- POR QUÉ. Una tienda de barrio no le compra todo a un proveedor con NIT: el
+-- cartón de huevos se trae de la tienda de la esquina y la caja de tomate del
+-- mercado. Exigir el proveedor obligaba a inventar una ficha por cada compra
+-- de ocasión, así que el maestro de proveedores se llenaba de basura — o, peor,
+-- la compra no se registraba y el inventario quedaba mal.
+--
+-- COMPATIBLE CON LOS DATOS EXISTENTES: solo quita la restricción. Las compras
+-- que ya existen conservan su proveedor; ninguna fila se toca.
+ALTER TABLE purchases ALTER COLUMN supplier_id DROP NOT NULL;

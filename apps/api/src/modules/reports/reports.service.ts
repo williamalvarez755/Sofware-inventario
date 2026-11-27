@@ -489,7 +489,7 @@ export function getPurchasesBySupplier(tenantId: string, params: RangeParams) {
   return withTenantTx(tenantId, async (tx) => {
     const rows = await tx.$queryRaw<
       {
-        supplier_id: string;
+        supplier_id: string | null;
         supplier: string;
         purchases_count: number;
         total: bigint;
@@ -497,13 +497,18 @@ export function getPurchasesBySupplier(tenantId: string, params: RangeParams) {
         last_purchase: Date | null;
       }[]
     >(Prisma.sql`
-      SELECT sup.id AS supplier_id, sup.name AS supplier,
+      SELECT sup.id AS supplier_id, COALESCE(sup.name, 'Sin proveedor') AS supplier,
              COUNT(*) FILTER (WHERE pu.status = 'RECEIVED')::int AS purchases_count,
              COALESCE(SUM(pu.total) FILTER (WHERE pu.status = 'RECEIVED'), 0)::bigint AS total,
              COUNT(*) FILTER (WHERE pu.status = 'VOIDED')::int AS voided_count,
              MAX(pu.purchased_at) AS last_purchase
       FROM purchases pu
-      JOIN suppliers sup ON sup.id = pu.supplier_id
+      -- LEFT y no INNER: el proveedor es opcional, y con un join interno las
+      -- compras de ocasión desaparecerían de este reporte sin avisar — su
+      -- total dejaría de cuadrar con el de compras del tablero, que es
+      -- exactamente la clase de descuadre que hace desconfiar de las cifras.
+      -- Todas las que no tienen proveedor caen en un solo renglón.
+      LEFT JOIN suppliers sup ON sup.id = pu.supplier_id
       WHERE ${storeFilter(Prisma.sql`pu.store_id`, params.storeIds)}
         AND pu.purchased_at >= ${start} AND pu.purchased_at < ${end}
       GROUP BY sup.id, sup.name

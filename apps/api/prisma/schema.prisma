@@ -616,7 +616,7 @@ model Purchase {
   id              String         @id @db.Uuid
   tenantId        String         @map("tenant_id") @db.Uuid
   storeId         String         @map("store_id") @db.Uuid
-  supplierId      String         @map("supplier_id") @db.Uuid
+  supplierId      String?        @map("supplier_id") @db.Uuid // opcional: el mercado y la tienda de la esquina no son proveedores con ficha
   userId          String         @map("user_id") @db.Uuid
   status          PurchaseStatus @default(RECEIVED)
   supplierInvoice String?        @map("supplier_invoice")
@@ -628,7 +628,7 @@ model Purchase {
   voidReason      String?        @map("void_reason")
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz()
 
-  supplier Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   items    PurchaseItem[]
 
   @@index([storeId, purchasedAt(sort: Desc)])

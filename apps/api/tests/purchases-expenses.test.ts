@@ -381,3 +381,99 @@ describe('Valorización del inventario (informe E7)', () => {
     expect(valorizado).toBe(pagado);
   });
 });
+
+/**
+ * El proveedor es OPCIONAL (D-073).
+ *
+ * Una tienda de barrio no le compra todo a un proveedor con NIT: el cartón de
+ * huevos se trae de la tienda de la esquina y la caja de tomate del mercado.
+ * Exigirlo obligaba a inventar una ficha por compra de ocasión —o a no
+ * registrar la compra, que es peor porque el inventario queda mal.
+ */
+describe('Compra sin proveedor', () => {
+  /** Hoy en Guatemala, que es como el reporte agrupa los días (D-025). */
+  const hoyGt = (): string =>
+    new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guatemala' });
+
+  it('entra al inventario y recalcula el CPP igual que con proveedor', async () => {
+    const producto = await newProduct(10, 500n); // 10 uds a Q5.00
+
+    const compra = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        storeId: storeA.id,
+        items: [{ productId: producto, qty: 10, unitCost: 700 }], // sin supplierId
+      });
+    expect(compra.status).toBe(201);
+    expect(compra.body.supplier).toBeNull();
+
+    // El CPP se pondera igual: (10×500 + 10×700) / 20 = 600.
+    const sp = await storeProductOf(producto);
+    expect(Number(sp.stockQty)).toBe(20);
+    expect(Number(sp.avgCost)).toBe(600);
+
+    // Y sin proveedor no se inventa un último costo que atribuirle a nadie.
+    const vinculos = await prismaAdmin.productSupplier.count({
+      where: { productId: producto },
+    });
+    expect(vinculos).toBe(0);
+  });
+
+  /**
+   * LA TRAMPA QUE ESTO DESTAPÓ. El reporte por proveedor hacía `JOIN suppliers`
+   * —interno—. Con la columna aceptando nulos y ese join intacto, las compras
+   * de ocasión habrían desaparecido del reporte SIN AVISAR, y su total habría
+   * dejado de cuadrar con el de compras del tablero. Un descuadre silencioso
+   * entre dos pantallas es justo lo que hace que el dueño deje de creerle a
+   * las cifras, así que esta prueba vale más que la de arriba.
+   */
+  it('aparece en el reporte como "Sin proveedor" y su total cuadra', async () => {
+    const producto = await newProduct(0, 0n);
+    const monto = 1234;
+
+    const compra = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        storeId: storeA.id,
+        items: [{ productId: producto, qty: 1, unitCost: monto }],
+      });
+    expect(compra.status).toBe(201);
+
+    const hoy = hoyGt();
+    const reporte = await request(app)
+      .get(`/api/reports/purchases-by-supplier?from=${hoy}&to=${hoy}&storeId=${storeA.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(reporte.status).toBe(200);
+
+    const sinProveedor = (reporte.body as { supplierId: string | null; supplier: string; total: string }[])
+      .find((r) => r.supplierId === null);
+    expect(sinProveedor).toBeDefined();
+    expect(sinProveedor!.supplier).toBe('Sin proveedor');
+    expect(BigInt(sinProveedor!.total)).toBeGreaterThanOrEqual(BigInt(monto));
+
+    // La suma del reporte es la misma que la del tablero: ninguna compra se
+    // perdió por el camino. Esto es lo que un join interno habría roto.
+    const porProveedor = (reporte.body as { total: string }[])
+      .reduce((acc, r) => acc + BigInt(r.total), 0n);
+    const tablero = await request(app)
+      .get(`/api/reports/dashboard?from=${hoy}&to=${hoy}&storeId=${storeA.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(tablero.status).toBe(200);
+    expect(porProveedor).toBe(BigInt(tablero.body.purchasesTotal));
+  });
+
+  it('opcional no es "sin validar": un proveedor inexistente sigue dando 404', async () => {
+    const producto = await newProduct(0, 0n);
+    const res = await request(app)
+      .post('/api/purchases')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        storeId: storeA.id,
+        supplierId: uuidv7(), // uuid válido, proveedor que no existe
+        items: [{ productId: producto, qty: 1, unitCost: 100 }],
+      });
+    expect(res.status).toBe(404);
+  });
+});

@@ -14,7 +14,7 @@ interface PurchaseRow {
   supplierInvoice: string | null;
   purchasedAt: string;
   total: string;
-  supplier: { name: string };
+  supplier: { name: string } | null;
   _count: { items: number };
 }
 interface ProductHit { id: string; name: string; sku: string }
@@ -85,7 +85,7 @@ export function PurchasesPage() {
                     : 'font-medium text-[hsl(var(--text-1))]'
                 }
               >
-                {p.supplier.name}
+                {p.supplier?.name ?? 'Sin proveedor'}
               </span>
               {p.status === 'VOIDED' && <Badge tone="danger">Anulada</Badge>}
             </Cell>
@@ -154,7 +154,8 @@ function NewPurchaseModal({
     api<SupplierOpt[]>('/api/suppliers').then((s) => {
       const activos = s.filter((x) => x.isActive !== false);
       setSuppliers(activos);
-      if (activos.length) setSupplierId(activos[0]!.id);
+      // No se preselecciona: ahora que es opcional, atribuirle la compra
+      // al primer proveedor de la lista es peor que dejarlo en blanco.
     });
   }, []);
 
@@ -195,7 +196,7 @@ function NewPurchaseModal({
         method: 'POST',
         body: JSON.stringify({
           storeId,
-          supplierId,
+          supplierId: supplierId || undefined,
           supplierInvoice: invoice || undefined,
           items: lines.map((l) => ({
             productId: l.product.id,
@@ -215,7 +216,12 @@ function NewPurchaseModal({
     <Modal title="Nueva compra" onClose={onClose} wide>
       <form onSubmit={submit}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Select label="Proveedor" required value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+          <Select
+            label="Proveedor (opcional)"
+            value={supplierId}
+            onChange={(e) => setSupplierId(e.target.value)}
+          >
+            <option value="">Sin proveedor</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
           <Field
@@ -342,7 +348,7 @@ function VoidPurchaseModal({
   return (
     <Modal
       title="Anular compra"
-      description={`${purchase.supplier.name} · ${formatQ(BigInt(purchase.total))}. Revierte stock y costo promedio; solo es posible si la mercadería sigue en existencia.`}
+      description={`${purchase.supplier?.name ?? 'Sin proveedor'} · ${formatQ(BigInt(purchase.total))}. Revierte stock y costo promedio; solo es posible si la mercadería sigue en existencia.`}
       onClose={onClose}
     >
       <form onSubmit={submit}>

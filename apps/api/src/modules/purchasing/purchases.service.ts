@@ -19,10 +19,15 @@ export function createPurchase(
   req: Request,
 ) {
   return withTenantTx(tenantId, async (tx) => {
-    const supplier = await tx.supplier.findFirst({
-      where: { id: input.supplierId, deletedAt: null, isActive: true },
-    });
-    if (!supplier) throw notFound('Proveedor no encontrado o inactivo');
+    // El proveedor es opcional: se compra en el mercado o en la tienda de la
+    // esquina sin que haya a quién ficharle. Si viene, se valida igual que
+    // antes; si no viene, la compra entra al inventario sin proveedor.
+    const supplier = input.supplierId
+      ? await tx.supplier.findFirst({
+          where: { id: input.supplierId, deletedAt: null, isActive: true },
+        })
+      : null;
+    if (input.supplierId && !supplier) throw notFound('Proveedor no encontrado o inactivo');
 
     const products = await tx.product.findMany({
       where: { id: { in: input.items.map((i) => i.productId) }, deletedAt: null },
@@ -46,7 +51,7 @@ export function createPurchase(
         id: purchaseId,
         tenantId,
         storeId: input.storeId,
-        supplierId: input.supplierId,
+        supplierId: input.supplierId ?? null,
         userId,
         supplierInvoice: input.supplierInvoice ?? null,
         notes: input.notes ?? null,
@@ -77,20 +82,24 @@ export function createPurchase(
         refType: 'purchase',
         refId: purchaseId,
       });
-      // Último costo por proveedor: agiliza la próxima recepción
-      await tx.productSupplier.upsert({
-        where: {
-          productId_supplierId: { productId: item.productId, supplierId: input.supplierId },
-        },
-        update: { lastCost: BigInt(item.unitCost), lastPurchaseAt: new Date() },
-        create: {
-          tenantId,
-          productId: item.productId,
-          supplierId: input.supplierId,
-          lastCost: BigInt(item.unitCost),
-          lastPurchaseAt: new Date(),
-        },
-      });
+      // Último costo por proveedor: agiliza la próxima recepción. Sin
+      // proveedor no hay a quién atribuirle el costo, así que se omite — el
+      // CPP del producto ya quedó actualizado arriba, que es lo que cuenta.
+      if (input.supplierId) {
+        await tx.productSupplier.upsert({
+          where: {
+            productId_supplierId: { productId: item.productId, supplierId: input.supplierId },
+          },
+          update: { lastCost: BigInt(item.unitCost), lastPurchaseAt: new Date() },
+          create: {
+            tenantId,
+            productId: item.productId,
+            supplierId: input.supplierId,
+            lastCost: BigInt(item.unitCost),
+            lastPurchaseAt: new Date(),
+          },
+        });
+      }
     }
 
     await audit(tx, {
@@ -100,7 +109,11 @@ export function createPurchase(
       action: 'purchase.create',
       entityType: 'purchase',
       entityId: purchaseId,
-      after: { supplier: supplier.name, total: total.toString(), items: input.items.length },
+      after: {
+        supplier: supplier?.name ?? null,
+        total: total.toString(),
+        items: input.items.length,
+      },
     }, req);
 
     return getPurchaseTx(tx, purchaseId);

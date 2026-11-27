@@ -311,7 +311,9 @@ export const supplierUpdateSchema = supplierSchema.partial().extend({
 
 export const purchaseCreateSchema = z.object({
   storeId: z.string().uuid(),
-  supplierId: z.string().uuid(),
+  // Opcional a propósito: una compra de ocasión no tiene proveedor con
+  // ficha, y obligar a inventar uno llenaba el maestro de basura.
+  supplierId: z.string().uuid().optional(),
   supplierInvoice: z.string().trim().max(40).optional(),
   notes: z.string().trim().max(300).optional(),
   items: z
