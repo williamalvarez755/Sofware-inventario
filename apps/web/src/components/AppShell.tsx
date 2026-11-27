@@ -7,6 +7,7 @@ import { CambiarContrasena } from './CambiarContrasena';
 import { Icon } from './Icon';
 import { Marca } from './Marca';
 import { ThemePicker } from './ThemePicker';
+import { useLectorFisico } from '../lib/teclado';
 import { EN_TELEFONO, GRUPOS, INICIO, moduloDe, tono, type Modulo } from './navegacion';
 import { Button, Modal, cx } from './ui';
 
@@ -226,6 +227,62 @@ function Avatar({ nombre, size = 32 }: { nombre: string; size?: number }) {
   );
 }
 
+// ───────────────────────── Lector de códigos de barras ───────────────────────
+
+/**
+ * ¿Hay un lector conectado a ESTE equipo?
+ *
+ * Quien lo tiene enfrente lo sabe; el navegador solo puede inferirlo, y se
+ * equivoca en los dos sentidos: un teléfono con lector Bluetooth y una
+ * computadora de mostrador sin lector son igual de reales. Por eso se
+ * pregunta en vez de adivinar, y se guarda por equipo: la computadora del
+ * mostrador y el teléfono del dueño son la misma cuenta.
+ *
+ * Encendido, el campo de escaneo se queda el foco para que el lector escriba
+ * ahí. Apagado, no — que en un teléfono es lo mismo que decir "no me subas el
+ * teclado en cada producto".
+ */
+function InterruptorLector() {
+  const [usa, setUsa] = useLectorFisico();
+
+  return (
+    <button
+      role="switch"
+      aria-checked={usa}
+      onClick={() => setUsa(!usa)}
+      className="flex w-full items-start gap-2.5 rounded-xl px-1 py-1 text-left"
+    >
+      <span className="mt-0.5 text-[hsl(var(--text-2))]">
+        <Icon name="codigo" size={17} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-[hsl(var(--text-1))]">
+          Lector de códigos
+        </span>
+        <span className="block text-xs leading-snug text-[hsl(var(--text-3))]">
+          {usa
+            ? 'El campo queda listo para el lector'
+            : 'Apagado: no sube el teclado al escanear'}
+        </span>
+      </span>
+      <span
+        aria-hidden
+        className={cx(
+          'mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors',
+          usa ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--text-1)/0.18)]',
+        )}
+      >
+        <span
+          className={cx(
+            'size-4 rounded-full bg-white shadow-sm transition-transform',
+            usa && 'translate-x-4',
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
 // ───────────────────────────── Menú de la cuenta ─────────────────────────────
 
 function MenuCuenta({
@@ -263,6 +320,11 @@ function MenuCuenta({
 
         <div className="mb-3 rounded-xl bg-[hsl(var(--text-1)/0.04)] p-3">
           <ThemePicker />
+        </div>
+
+        <div className="mb-3 rounded-xl bg-[hsl(var(--text-1)/0.04)] p-3">
+          <p className="rotulo mb-1.5">Este equipo</p>
+          <InterruptorLector />
         </div>
 
         {!impersonation && (

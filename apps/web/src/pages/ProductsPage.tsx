@@ -19,7 +19,7 @@ import {
   Select,
   Table,
 } from '../components/ui';
-import { enfocarAbreTeclado } from '../lib/teclado';
+import { usaLectorFisico } from '../lib/teclado';
 
 interface StoreOpt { id: string; name: string }
 interface Unit { id: string; code: string; name: string; allowsDecimals: boolean }
@@ -317,13 +317,13 @@ export function ProductsPage() {
 }
 
 /**
- * Deja el campo listo para el siguiente código, salvo donde eso abriría el
- * teclado en pantalla: en un teléfono no hay lector físico al que servirle el
- * campo, y enfocarlo tapa el resultado que la persona acaba de consultar
- * (ver `teclado.ts`).
+ * Deja el campo listo para el siguiente código, pero solo donde hay lector al
+ * que servírselo: sin lector —un teléfono— enfocarlo es abrir el teclado
+ * encima del resultado que la persona acaba de consultar. El interruptor está
+ * en el menú de la cuenta (ver `teclado.ts`).
  */
 function volverAlCampo(campo: HTMLInputElement | null) {
-  if (enfocarAbreTeclado()) return;
+  if (!usaLectorFisico()) return;
   campo?.focus();
 }
 
@@ -331,8 +331,8 @@ function volverAlCampo(campo: HTMLInputElement | null) {
  * Alta por escaneo: el flujo real de una tienda es "tomo el producto de la
  * bolsa del proveedor, lo paso por el lector y lo doy de alta". El lector HID
  * escribe en el campo enfocado y termina en Enter, así que el campo recupera
- * el foco tras cada consulta — en una computadora; en un teléfono eso era
- * levantar el teclado encima del resultado, y ahí no hay lector que atender.
+ * el foco tras cada consulta — donde hay lector; donde no, eso era levantar el
+ * teclado encima del resultado que se acababa de pedir.
  *
  * Cuando el código no existe hay DOS salidas, y la segunda es la que evita el
  * problema de verdad: el producto puede existir ya (cargado por CSV, sin

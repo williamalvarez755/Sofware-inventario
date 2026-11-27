@@ -21,7 +21,7 @@ import {
 import { guardarCarrito, leerCarrito } from '../lib/carrito';
 import { crearColaEscaneos } from '../lib/colaEscaneos';
 import { crearDetectorDeRafaga } from '../lib/rafagaLector';
-import { enfocarAbreTeclado } from '../lib/teclado';
+import { useLectorFisico } from '../lib/teclado';
 import { retryOnNetworkFailure, useOnlineStatus } from '../lib/connection';
 import { isThermalPrintingAvailable, printThermalReceipt } from '../lib/escpos';
 
@@ -60,6 +60,7 @@ export function PosPage() {
   const [showCamera, setShowCamera] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
   const online = useOnlineStatus();
+  const [usaLector] = useLectorFisico();
 
   useEffect(() => {
     api<StoreOpt[]>('/api/stores').then((s) => {
@@ -122,20 +123,20 @@ export function PosPage() {
   }, [cart, storeId, registerId]);
 
   // El foco vuelve al campo de escaneo tras cada acción: el cajero trabaja
-  // con el lector en la mano, no con el mouse.
+  // con el lector en la mano, no con el mouse — y el lector escribe donde esté
+  // el foco.
   //
-  // PERO NO EN UN TELÉFONO. Ahí enfocar un campo de texto es abrir el teclado,
-  // así que cada producto que entraba al carrito lo hacía subir y tapar media
-  // pantalla —el visor de la cámara incluido, que es desde donde se estaba
-  // escaneando—. Y el foco tampoco servía para nada: no hay lector físico que
-  // atender, y el que hay se atiende con captura global (D-067).
+  // SOLO SI HAY LECTOR. En un teléfono sin lector, enfocar un campo de texto
+  // es abrir el teclado: cada producto que entraba al carrito lo hacía subir y
+  // tapar media pantalla, el visor de la cámara incluido. El interruptor vive
+  // en el menú de la cuenta y se guarda por equipo (ver `teclado.ts`).
   //
   // Tampoco mientras el visor está abierto: el campo queda detrás, de modo que
   // llevarle el foco se lo quita a la cámara sin que se vea por qué.
   useEffect(() => {
-    if (showCamera || enfocarAbreTeclado()) return;
+    if (showCamera || !usaLector) return;
     scanRef.current?.focus();
-  }, [session, cart.length, receipt, showCamera]);
+  }, [session, cart.length, receipt, showCamera, usaLector]);
 
   const addToCart = useCallback((product: ProductHit) => {
     setCart((c) => {
