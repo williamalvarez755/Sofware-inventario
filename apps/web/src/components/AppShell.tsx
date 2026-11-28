@@ -8,6 +8,19 @@ import { Icon } from './Icon';
 import { Marca } from './Marca';
 import { ThemePicker } from './ThemePicker';
 import { useLectorFisico } from '../lib/teclado';
+import {
+  MS_ENTRE_ESCRITURAS,
+  OPCIONES_MINUTOS,
+  etiquetaMinutos,
+  marcarActividad,
+  minutosDeInactividad,
+  tocaAvisar,
+  tocaCerrar,
+  ultimaActividad,
+  useCerrarAlCerrarPestana,
+  useMinutosDeInactividad,
+} from '../lib/sesion';
+import { reubicarSesion } from '../api/client';
 import { EN_TELEFONO, GRUPOS, INICIO, moduloDe, tono, type Modulo } from './navegacion';
 import { Button, Modal, cx } from './ui';
 
@@ -283,6 +296,206 @@ function InterruptorLector() {
   );
 }
 
+// ──────────────────────── Cierre de sesión por inactividad ────────────────────
+
+/**
+ * Cierra la sesión cuando el equipo lleva un rato sin que nadie lo toque.
+ *
+ * POR QUÉ HACE FALTA. El refresh token vive 30 días en el navegador (D-021).
+ * En la computadora del mostrador —que es compartida— eso significa que el
+ * siguiente que se siente ES el cajero del turno anterior: anula ventas,
+ * retira efectivo, ve márgenes, y la bitácora se lo atribuye a quien ya se
+ * fue, que es lo que deja un registro de auditoría sin valor (D-064).
+ *
+ * CÓMO SE MIDE LA ACTIVIDAD. Se anota la hora en `localStorage` —compartida
+ * entre pestañas, porque trabajar en el punto de venta tiene que contar como
+ * actividad en la pestaña de reportes— y un reloj comprueba cada 15 s. NO se
+ * reinicia un `setTimeout` en cada evento: mover el mouse dispararía cientos
+ * de reprogramaciones por segundo. Y la escritura se limita a una cada 15 s
+ * por la misma razón.
+ *
+ * SE AVISA ANTES. Cerrar sin aviso, con un carrito a medias, sería sacarle el
+ * trabajo de las manos a alguien que está atendiendo. Un minuto antes aparece
+ * el aviso con un botón para seguir; cualquier toque en la pantalla también
+ * cuenta.
+ *
+ * EL CARRITO NO SE PIERDE. `clearSession` solo borra el token; el carrito vive
+ * aparte, por tienda y caja, con 12 h de vigencia (D-059). Al volver a entrar
+ * sigue ahí — que es justo lo que hace tolerable este cierre.
+ */
+function VigilanteDeInactividad() {
+  const { logout } = useAuth();
+  const [minutos] = useMinutosDeInactividad();
+  const [avisando, setAvisando] = useState(false);
+  const [segundos, setSegundos] = useState(60);
+
+  useEffect(() => {
+    if (minutos <= 0) {
+      setAvisando(false);
+      return;
+    }
+
+    let ultimaEscritura = 0;
+    let cerrando = false;
+
+    const anotar = () => {
+      const ahora = Date.now();
+      // Esconder el aviso va PRIMERO y sin limitador: es gratis, y ponerlo
+      // detrás del límite de escrituras significaba que tocar la pantalla dos
+      // veces en 15 s dejaba el aviso puesto la segunda — "lo toqué y no pasó
+      // nada", que es justo lo que este aviso no puede hacer.
+      setAvisando(false);
+      if (ahora - ultimaEscritura < MS_ENTRE_ESCRITURAS) return;
+      ultimaEscritura = ahora;
+      marcarActividad(ahora);
+    };
+
+    // Al montar se cuenta como actividad: nadie debe entrar y encontrarse el
+    // aviso porque la marca anterior era vieja.
+    marcarActividad(Date.now());
+    ultimaEscritura = Date.now();
+
+    const eventos = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    for (const e of eventos) document.addEventListener(e, anotar, { passive: true });
+
+    const revisar = () => {
+      const ahora = Date.now();
+      const desde = ultimaActividad(ahora);
+      if (tocaCerrar(desde, ahora, minutos)) {
+        if (cerrando) return;
+        cerrando = true;
+        // `logout` revoca en el servidor: el token no queda válido y
+        // simplemente inalcanzable, queda inservible.
+        void logout();
+        return;
+      }
+      if (tocaAvisar(desde, ahora, minutos)) {
+        setAvisando(true);
+        setSegundos(Math.max(1, Math.ceil((desde + minutos * 60_000 - ahora) / 1000)));
+      } else {
+        setAvisando(false);
+      }
+    };
+
+    // Cada 5 s para que la cuenta regresiva del aviso se vea avanzar; el
+    // trabajo por vuelta es leer un número.
+    const reloj = setInterval(revisar, 5_000);
+    // Al volver a la pestaña se revisa en el acto: un teléfono con la
+    // pantalla apagada no ejecuta temporizadores, así que sin esto la sesión
+    // vencida seguiría viva hasta el siguiente tic.
+    document.addEventListener('visibilitychange', revisar);
+
+    return () => {
+      clearInterval(reloj);
+      for (const e of eventos) document.removeEventListener(e, anotar);
+      document.removeEventListener('visibilitychange', revisar);
+    };
+  }, [minutos, logout]);
+
+  if (!avisando) return null;
+
+  /**
+   * Responde EN EL MISMO CLIC.
+   *
+   * Antes el botón solo anotaba la actividad y el aviso se iba cuando el reloj
+   * volviera a mirar — hasta 5 segundos después. Medido en navegador: se
+   * presionaba "Sigo aquí" y el cuadro seguía ahí. Un botón que tarda en
+   * reaccionar se presiona dos veces, y aquí el segundo clic caería sobre lo
+   * que haya debajo cuando el cuadro por fin se cierre.
+   */
+  const seguirAqui = () => {
+    marcarActividad(Date.now());
+    setAvisando(false);
+  };
+
+  return (
+    <Modal onClose={seguirAqui} title="¿Sigue ahí?">
+      <p className="text-sm text-[hsl(var(--text-2))]">
+        La sesión se cerrará en {segundos} segundo{segundos === 1 ? '' : 's'} por
+        inactividad. Su carrito no se pierde.
+      </p>
+      <div className="mt-4 flex justify-end">
+        <Button onClick={seguirAqui}>Sigo aquí</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ───────────────────────── Interruptores de sesión ───────────────────────────
+
+function OpcionesDeSesion() {
+  const [minutos, setMinutos] = useMinutosDeInactividad();
+  const [alCerrar, setAlCerrar] = useCerrarAlCerrarPestana();
+
+  return (
+    <>
+      <label className="flex items-start gap-2.5 px-1 py-1">
+        <span className="mt-0.5 text-[hsl(var(--text-2))]">
+          <Icon name="reloj" size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-[hsl(var(--text-1))]">
+            Cerrar sesión sin actividad
+          </span>
+          <select
+            value={minutos}
+            onChange={(e) => setMinutos(Number(e.target.value))}
+            className="glass-soft mt-1 w-full rounded-lg px-2 py-1 text-xs text-[hsl(var(--text-1))]"
+          >
+            {OPCIONES_MINUTOS.map((m) => (
+              <option key={m} value={m}>
+                {etiquetaMinutos(m)}
+              </option>
+            ))}
+          </select>
+        </span>
+      </label>
+
+      <button
+        role="switch"
+        aria-checked={alCerrar}
+        onClick={() => {
+          const siguiente = !alCerrar;
+          setAlCerrar(siguiente);
+          // Mover el token YA. Sin esto el interruptor no haría nada hasta el
+          // siguiente ingreso, y un interruptor que no surte efecto al tocarlo
+          // es peor que no tenerlo.
+          reubicarSesion();
+        }}
+        className="flex w-full items-start gap-2.5 rounded-xl px-1 py-1 text-left"
+      >
+        <span className="mt-0.5 text-[hsl(var(--text-2))]">
+          <Icon name="candado" size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-[hsl(var(--text-1))]">
+            Salir al cerrar la pestaña
+          </span>
+          <span className="block text-xs leading-snug text-[hsl(var(--text-3))]">
+            {alCerrar
+              ? 'Cerrar la pestaña cierra la sesión (recargar no)'
+              : 'Apagado: la sesión sobrevive a cerrar la pestaña'}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className={cx(
+            'mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors',
+            alCerrar ? 'bg-[hsl(var(--accent))]' : 'bg-[hsl(var(--text-1)/0.18)]',
+          )}
+        >
+          <span
+            className={cx(
+              'size-4 rounded-full bg-white shadow-sm transition-transform',
+              alCerrar && 'translate-x-4',
+            )}
+          />
+        </span>
+      </button>
+    </>
+  );
+}
+
 // ───────────────────────────── Menú de la cuenta ─────────────────────────────
 
 function MenuCuenta({
@@ -325,6 +538,7 @@ function MenuCuenta({
         <div className="mb-3 rounded-xl bg-[hsl(var(--text-1)/0.04)] p-3">
           <p className="rotulo mb-1.5">Este equipo</p>
           <InterruptorLector />
+          <OpcionesDeSesion />
         </div>
 
         {!impersonation && (
@@ -391,10 +605,31 @@ function Campana() {
     }
   }
 
+  /**
+   * Sondea cada 2 minutos — pero NO mientras la pestaña está oculta.
+   *
+   * ESTO ERA UNA FUGA DE VERDAD. Sin la condición de visibilidad, una pestaña
+   * abierta y olvidada golpeaba el API cada 2 minutos para siempre: ~720
+   * peticiones al día por pestaña, por nada, porque nadie estaba mirando la
+   * campana. Con cientos de tiendas eso es carga pagada a cambio de cero.
+   *
+   * Al volver a ver la pestaña se carga de inmediato, así que la campana nunca
+   * muestra algo viejo: lo que se quita es el sondeo a ciegas, no la
+   * actualización.
+   */
   useEffect(() => {
-    load();
-    const timer = setInterval(load, 120_000);
-    return () => clearInterval(timer);
+    const visible = () => document.visibilityState !== 'hidden';
+    const quizaCargar = () => {
+      if (visible()) void load();
+    };
+
+    quizaCargar();
+    const timer = setInterval(quizaCargar, 120_000);
+    document.addEventListener('visibilitychange', quizaCargar);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', quizaCargar);
+    };
   }, []);
 
   async function toggle() {
@@ -716,6 +951,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       {buscando && <Buscador onClose={() => setBuscando(false)} />}
+      <VigilanteDeInactividad />
     </div>
   );
 }

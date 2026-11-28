@@ -2,6 +2,8 @@
  * Cliente HTTP mínimo: access token en memoria, refresh token en localStorage
  * (D-021), auto-refresh transparente ante 401 con reintento único.
  */
+import { cierraAlCerrarPestana } from '../lib/sesion';
+
 const BASE_URL: string = import.meta.env.VITE_API_URL ?? '';
 const REFRESH_KEY = 'mm.refreshToken';
 /** Token de soporte ("ver como tenant"): vive en sessionStorage porque muere
@@ -9,6 +11,58 @@ const REFRESH_KEY = 'mm.refreshToken';
 const IMPERSONATION_KEY = 'mm.impersonation';
 
 let accessToken: string | null = null;
+
+/**
+ * Dónde se guarda el refresh token en ESTE equipo.
+ *
+ * `sessionStorage` muere con la pestaña pero sobrevive a recargar — que es
+ * exactamente la distinción que hace falta: en una tienda se recarga (D-059),
+ * y lo que no debe sobrevivir es cerrar el navegador y dejar la computadora
+ * del mostrador con la sesión del cajero abierta.
+ *
+ * Se importa la preferencia en vez de preguntarla por parámetro para que
+ * `setSession` siga teniendo la misma firma en los seis lugares que la llaman.
+ */
+function almacenDeSesion(): Storage {
+  return cierraAlCerrarPestana() ? sessionStorage : localStorage;
+}
+
+/**
+ * El token, buscando en los dos almacenes.
+ *
+ * `sessionStorage` primero: si hay uno ahí es el de esta pestaña, y manda
+ * sobre cualquier resto que haya quedado en `localStorage` de antes de
+ * cambiar la preferencia.
+ */
+function leerRefresh(): string | null {
+  try {
+    return sessionStorage.getItem(REFRESH_KEY) ?? localStorage.getItem(REFRESH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mueve el token al almacén que corresponde cuando la preferencia cambia.
+ *
+ * SIN ESTO EL INTERRUPTOR SERÍA LETRA MUERTA hasta el siguiente ingreso: con
+ * la sesión ya abierta, el token sigue en `localStorage` y seguiría
+ * sobreviviendo al cierre de la pestaña aunque la persona acabara de pedir lo
+ * contrario. Un interruptor que no hace nada al tocarlo es peor que no
+ * tenerlo.
+ */
+export function reubicarSesion(): void {
+  const token = leerRefresh();
+  if (!token) return;
+  const destino = almacenDeSesion();
+  const otro = destino === sessionStorage ? localStorage : sessionStorage;
+  try {
+    destino.setItem(REFRESH_KEY, token);
+    otro.removeItem(REFRESH_KEY);
+  } catch {
+    /* sin persistencia la sesión vive en memoria hasta recargar */
+  }
+}
 
 export interface ImpersonationInfo {
   accessToken: string;
@@ -33,16 +87,26 @@ export function stopImpersonation() {
 
 export function setSession(tokens: { accessToken: string; refreshToken: string }) {
   accessToken = tokens.accessToken;
-  localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+  almacenDeSesion().setItem(REFRESH_KEY, tokens.refreshToken);
+  // El otro almacén se limpia siempre: un token duplicado en el que ya no
+  // manda es justamente el que sobreviviría a lo que la persona pidió.
+  (almacenDeSesion() === sessionStorage ? localStorage : sessionStorage).removeItem(REFRESH_KEY);
 }
 
 export function clearSession() {
   accessToken = null;
-  localStorage.removeItem(REFRESH_KEY);
+  // Los dos, sin preguntar: cerrar sesión no puede depender de que la
+  // preferencia siga siendo la misma que cuando se abrió.
+  try {
+    localStorage.removeItem(REFRESH_KEY);
+    sessionStorage.removeItem(REFRESH_KEY);
+  } catch {
+    /* nada que limpiar */
+  }
 }
 
 export function hasStoredSession(): boolean {
-  return localStorage.getItem(REFRESH_KEY) !== null;
+  return leerRefresh() !== null;
 }
 
 export class ApiError extends Error {
@@ -85,7 +149,7 @@ async function doRefresh(): Promise<boolean> {
   // Una sesión de soporte no se renueva: expira a los 15 min y el super admin
   // debe volver a pedirla, dejando otra huella en la bitácora.
   if (getImpersonation()) return false;
-  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  const refreshToken = leerRefresh();
   if (!refreshToken) return false;
   const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
     method: 'POST',
@@ -149,7 +213,7 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
 }
 
 export async function logoutRequest(): Promise<void> {
-  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  const refreshToken = leerRefresh();
   if (refreshToken) {
     await api('/api/auth/logout', {
       method: 'POST',
